@@ -178,9 +178,6 @@ class Channel:
         self.status = Status(self._bus, self._channel)
         self.meas = Measure(self._bus, self._channel)
 
-    # @TODO: Ramp
-    # @TODO: DVM
-
     # ##########################
     # Channel output functions #
     # ##########################
@@ -1101,8 +1098,8 @@ class ValidateChannel(Validate):
         return self.float_and_str_tuples(current_range_values, value)
 
     def voltage_range(self, value):
-        voltage_range_values = (20, 5), 'auto'
-        return self.int_and_str_tuples(voltage_range_values, value)
+        voltage_range_values = (20.0, 5.0), 'auto'
+        return self.float_and_str_tuples(voltage_range_values, value)
 
     def mode(self, value):
         mode_values = ('auto', 'sour', 'source', 'sink')
