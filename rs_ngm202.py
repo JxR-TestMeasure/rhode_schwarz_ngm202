@@ -160,10 +160,11 @@ class Channel:
             'resistance_enable': self.get_resistance_state(),
             'impedance_enable': self.get_impedance_state()}
         if global_input_values['expanded_features']:
-            #self._ch_set['voltage_range'] = self.voltage_range()
+            self._chan['voltage_range'] = self.voltage_range()
             self._chan['current_range'] = self.current_range()
-            #self._ch_set['dvm_enable'] = self.dvm_enable()
-        #self._ch_set['ramp'] = self.ramp()
+            self._chan['dvm_enable'] = self.dvm()
+        self._chan['ramp_enable'] = self.ramp()
+        self._chan['ramp_duration'] = self.ramp_duration()
         self._chan['fast_transient'] = self.fast_transient_response()
         self._chan['output_delay'] = self.output_delay()
         self._chan['output_delay_duration'] = self.output_delay_duration()
@@ -221,13 +222,29 @@ class Channel:
             set_voltage, self._chan, 'voltage')
 
     # Set current limit for channel
-    # 1mA-6A @ 0-6V; 1mA-3A @6-20V; resolution 0.1mA
+    # 0.1mA-6A @ 0-6V; 0.1mA-3A @6-20V; resolution 0.1mA
     def current(self, set_current=None):
         query = 'CURR?'
         write = 'CURR'
         return self._command.read_write(
             query, write, self._validate.current,
             set_current, self._chan, 'current')
+
+    # Set voltage range for channel
+    # auto, 5V, 20V ranges
+    # Valid Input: 'auto', 5, 20, 0.1, 0.01
+    def voltage_range(self, set_voltage_range=None):
+        if global_input_values['expanded_features']:
+            query = 'SENS:VOLT:RANG?'
+            write = 'SENS:VOLT:RANG'
+            if str(set_voltage_range).upper() == 'AUTO':
+                write = 'SENS:VOLT:RANG:AUTO 1'
+                self._command.write(write)
+                self._chan['voltage_range'] = self.voltage_range()
+                return None
+            return self._command.read_write(
+                query, write, self._validate.voltage_range,
+                set_voltage_range, self._chan, 'voltage_range')
 
     # Set current range for channel
     # auto, 10A, 1A, 100mA, 10mA ranges
@@ -236,7 +253,7 @@ class Channel:
         if global_input_values['expanded_features']:
             query = 'SENS:CURR:RANG?'
             write = 'SENS:CURR:RANG'
-            if str(set_current_range).upper() is 'AUTO':
+            if str(set_current_range).upper() == 'AUTO':
                 write = 'SENS:CURR:RANG:AUTO 1'
                 self._command.write(write)
                 self._chan['current_range'] = self.current_range()
@@ -292,10 +309,12 @@ class Channel:
     def impedance_on(self):
         write = 'OUTP:IMP:STAT 1'
         self._command.write(write)
+        self._chan['impedance_enable'] = self.get_impedance_state()
 
     def impedance_off(self):
         write = 'OUTP:IMP:STAT 0'
         self._command.write(write)
+        self._chan['impedance_enable'] = self.get_impedance_state()
 
     def get_impedance_state(self):
         query = 'OUTP:IMP:STAT?'
@@ -305,14 +324,35 @@ class Channel:
         query = 'OUTP:FTR?'
         write = 'OUTP:FTR'
         return self._command.read_write(
-            query, write, self._validate.fast_transient_response,
+            query, write, self._validate.on_off,
             set_fast_transient_response, self._chan, 'fast_transient_response')
+
+    def ramp(self, set_ramp_on_off=None):
+        query = 'VOLT:RAMP?'
+        write = 'VOLT:RAMP'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_ramp_on_off, self._chan, 'ramp_enable')
+
+    def ramp_duration(self, set_ramp_duration=None):
+        query = 'VOLT:RAMP:DUR?'
+        write = 'VOLT:RAMP:DUR'
+        return self._command.read_write(
+            query, write, self._validate.ramp_duration,
+            set_ramp_duration, self._chan, 'ramp_duration')
+
+    def dvm(self, set_dvm_on_off=None):
+        query = 'VOLT:DVM?'
+        write = 'VOLT:DVM'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_dvm_on_off, self._chan, 'dvm_enable')
 
     def output_delay(self, set_output_delay=None):
         query = 'OUTP:DEL?'
         write = 'OUTP:DEL'
         return self._command.read_write(
-            query, write, self._validate.output_delay,
+            query, write, self._validate.on_off,
             set_output_delay, self._chan, 'output_delay')
 
     def output_delay_duration(self, set_output_delay_duration=None):
@@ -1028,6 +1068,14 @@ class Validate:
                 type(value), int))
 
 
+class ValidateArbitrary(Validate):
+    def __init__(self):
+        Validate().__init__()
+
+    def arb_points(self):
+        pass
+
+
 class ValidateChannel(Validate):
     def __init__(self):
         Validate().__init__()
@@ -1052,17 +1100,17 @@ class ValidateChannel(Validate):
         current_range_values = (10.0, 1.0, 0.1, 0.01), ('auto', 'min', 'max')
         return self.float_and_str_tuples(current_range_values, value)
 
+    def voltage_range(self, value):
+        voltage_range_values = (20, 5), 'auto'
+        return self.int_and_str_tuples(voltage_range_values, value)
+
     def mode(self, value):
         mode_values = ('auto', 'sour', 'source', 'sink')
         return self.str_tuple(mode_values, value)
 
-    def fast_transient_response(self, value):
-        fast_transient_response_values = (0, 1), ('on', 'off')
-        return self.int_rng_and_str_tuples(fast_transient_response_values, value)
-
-    def output_delay(self, value):
-        output_delay_values = (0, 1), ('on', 'off')
-        return self.int_rng_and_str_tuples(output_delay_values, value)
+    def on_off(self, value):
+        on_off_values = (0, 1), ('on', 'off')
+        return self.int_rng_and_str_tuples(on_off_values, value)
 
     def output_delay_duration(self, value):
         output_delay_duration_values = (0.001, 10.0), ('on', 'off')
@@ -1071,6 +1119,10 @@ class ValidateChannel(Validate):
     def channel(self, value):
         channel_values = ('1', '2')
         return self.str_tuple(channel_values, value)
+
+    def ramp_duration(self, value):
+        ramp_duration_values = (0.01, 10.0), ('min', 'max', 'default')
+        return self.float_rng_and_str_tuples(ramp_duration_values, value, 2)
 
 
 class ValidateDisplay(Validate):
