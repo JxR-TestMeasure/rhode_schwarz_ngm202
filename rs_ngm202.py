@@ -476,14 +476,12 @@ class FastLog:
 # dev.ch1.arb.transfer()                    transfer created arb for channel 1
 #      or
 # dev.ch1.arb.transfer(1)                   transfer created arb to channel 1
+#      or
 # dev.ch1.arb.transfer(2)                   activate created arb for channel 2
 # dev.ch1.arb.enable()                      enable arb on channel
 # dev.ch1.on()
 
 # @TODO implement trigger
-
-
-# @TODO not implemented
 class Arbitrary:
     def __init__(self, bus, channel: str):
         self._bus = bus
@@ -778,6 +776,7 @@ class Battery:
     pass
 
 
+# @TODO not implemented
 class Protection:
     def __init__(self, bus, channel):
         self._bus = bus
