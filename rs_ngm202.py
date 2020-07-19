@@ -173,9 +173,10 @@ class Channel:
             'settings': self._chan}
 
         # Channel objects
-        self.com = Common(self._bus)
+        #self.com = Common(self._bus)
+        self.arb = Arbitrary(self._bus, self._channel)
         self.flog = FastLog(self._bus, self._channel)
-        self.status = Status(self._bus, self._channel)
+        #self.status = Status(self._bus, self._channel)
         self.meas = Measure(self._bus, self._channel)
 
     # ##########################
@@ -830,13 +831,131 @@ class Battery:
         self._bus = bus
     pass
 
+# Usage Example:
+# dev.ch1.arb.clear()
+# dev.ch1.arb.add.point(5, 1, 0.1, 1)  ideally run in a loop
+# .
+# .
+# dev.ch1.arb.add_point(...)
+# dev.ch1.arb.edit_point(1024,....)         opps point 1024 is wrong (not necessary step)
+# dev.ch1.arb.build()                       transfer all arb points to device
+# dev.ch1.arb.repetitions(2)                repeat arb 2x
+# dev.ch1.arb.end_behavior('off')           turn off at end of sequence
+# dev.ch1.arb.activate_on_channel()         activate created arb for channel 1
+#      or
+# dev.ch1.arb.transfer_to_other_channel()   activate created arb for channel 2
+# dev.ch1.arb.enable()                      enable arb on channel
+# dev.ch1.on()
 
-# @TODO not implemented
+# @TODO implement file usage, trigger
+# @TODO bug in repetitions, needs more investigation
+# Setting repetition works.  Returning the value you set works.
+# The device just seems to refuse to use the set number.
+# Repetitions can be set manually on programmed arb (on front panel).
 class Arbitrary:
-    def __init__(self, bus):
+    def __init__(self, bus, channel: str):
         self._bus = bus
-    pass
+        self._channel = channel
+        self._validate = ValidateArbitrary()
+        self._command = Command(self._bus, self._channel)
+        self._arb_count = 0
+        self.arb_list = {}
+        self._arb = {}
+        self._arb = {'enable': self.get_enable(),
+                     'points': self._arb_count}
+        self.values = {
+            'device': global_input_values,
+            'settings': self._arb}
 
+    def disable(self):
+        write = ':ARB 0'
+        self._command.write(write)
+        self._arb['enable'] = self.get_enable()
+
+    def enable(self):
+        write = ':ARB 1'
+        self._command.write(write)
+        self._arb['points'] = self.get_enable()
+
+    def get_enable(self):
+        query = ':ARB?'
+        return self._command.read(query)
+
+    def clear(self):
+        self.arb_list.clear()
+        self._arb_count = 0
+        self._arb['points'] = self._arb_count
+        write = 'ARB:CLE'
+        self._command.write(write)
+
+    def add_point(self, voltage, current, dwell_time, interpolation):
+        arb_data = {}
+        val = self._validate.voltage(voltage)
+        arb_data['voltage'] = val
+        val = self._validate.current(current)
+        arb_data['current'] = val
+        val = self._validate.dwell_time(dwell_time)
+        arb_data['dwell_time'] = val
+        val = self._validate.interpolation(interpolation)
+        arb_data['interpolation'] = val
+        self._arb_count += 1
+        if self._arb_count <= 4096:
+            self.arb_list[str(self._arb_count)] = arb_data
+            self._arb['points'] = self._arb_count
+        else:
+            print('Maximum arb points reached!')
+
+    def edit_point(self, point, voltage, current, dwell_time, interpolation):
+        for x in self.arb_list.keys():
+            if str(point) == x:
+                arb_data = {}
+                val = self._validate.voltage(voltage)
+                arb_data['voltage'] = val
+                val = self._validate.current(current)
+                arb_data['current'] = val
+                val = self._validate.dwell_time(dwell_time)
+                arb_data['dwell_time'] = val
+                val = self._validate.interpolation(interpolation)
+                arb_data['interpolation'] = val
+                self.arb_list[x] = arb_data
+                return None
+        return print('Arb point not found!')
+
+    def build(self):
+        arb_data = ''
+        for x in self.arb_list.keys():
+            arb_data += self.arb_list[x]['voltage'] + ','
+            arb_data += self.arb_list[x]['current'] + ','
+            arb_data += self.arb_list[x]['dwell_time'] + ','
+            arb_data += self.arb_list[x]['interpolation'] + ','
+        write = 'ARB:DATA ' + arb_data[0:-1]
+        self._command.write(write)
+
+    def activate_on_channel(self):
+        write = 'ARB:TRAN ' + self._channel
+        self._command.write(write)
+
+    def transfer_to_other_channel(self):
+        if self._channel == '1':
+            channel = '2'
+        else:
+            channel = '1'
+        write = 'ARB:TRAN ' + channel
+        self._command.write(write)
+
+    def repetitions(self, set_num_repeats=None):
+        query = 'ARB:REP?'
+        write = 'ARB:REP'
+        return self._command.read_write(
+            query, write, self._validate.repetition,
+            set_num_repeats)
+
+    def end_behavior(self, set_end_behavior=None):
+        query = 'ARB:BEH:END?'
+        write = 'ARB:BEH:END'
+        return self._command.read_write(
+            query, write, self._validate.end_behavior,
+            set_end_behavior)
 
 # @TODO not implemented
 class Protection:
@@ -1064,13 +1183,43 @@ class Validate:
                              'Valid types: {}'.format(
                 type(value), int))
 
+    def halt_on_fail(self, value):
+        if isinstance(value, (ValueError, TypeError)):
+            raise value
+        else:
+            return value
 
 class ValidateArbitrary(Validate):
     def __init__(self):
         Validate().__init__()
 
-    def arb_points(self):
-        pass
+    def voltage(self, value):
+        voltage_values = (0.0, 20.0)
+        return self.halt_on_fail(self.float_rng_tuple(voltage_values, value, 3))
+
+    def current(self, value):
+        current_values = (0.001, 6.0)
+        return self.halt_on_fail(self.float_rng_tuple(current_values, value, 4))
+
+    def dwell_time(self, value):
+        dwell_time_values = (0.001, 1728000.0)
+        return self.halt_on_fail(self.float_rng_tuple(dwell_time_values, value, 3))
+
+    def interpolation(self, value):
+        interpolation_values = (0, 1)
+        return self.halt_on_fail(self.int_tuple(interpolation_values, value))
+
+    def channel(self, value):
+        channel_values = ('1', '2')
+        return self.str_tuple(channel_values, value)
+
+    def repetition(self, value):
+        repetition_values = (0, 65535)
+        return self.int_rng_tuple(repetition_values, value)
+
+    def end_behavior(self, value):
+        repetition_values = ('off', 'hold')
+        return self.str_tuple(repetition_values, value)
 
 
 class ValidateChannel(Validate):
@@ -1263,3 +1412,20 @@ class Command(Validate):
                     print(self.error_text('WARNING', val))
                 else:
                     self._bus.write(write)
+
+    def write_value(self, write: str,
+                   validator=None, value=None):
+        if self._channel is not None:
+            self.set_channel()
+        if validator is not None:
+            val = validator(value)
+            if isinstance(val, (ValueError, TypeError)):
+                print(self.error_text('WARNING', val))
+            else:
+                write = write + ' ' + str(value)
+                self._bus.write(write)
+                return None
+        else:
+            write = write + ' ' + str(value)
+            self._bus.write(write)
+            return None
