@@ -173,10 +173,8 @@ class Channel:
             'settings': self._chan}
 
         # Channel objects
-        #self.com = Common(self._bus)
         self.arb = Arbitrary(self._bus, self._channel)
         self.flog = FastLog(self._bus, self._channel)
-        #self.status = Status(self._bus, self._channel)
         self.meas = Measure(self._bus, self._channel)
 
     # ##########################
@@ -839,19 +837,17 @@ class Battery:
 # dev.ch1.arb.add_point(...)
 # dev.ch1.arb.edit_point(1024,....)         opps point 1024 is wrong (not necessary step)
 # dev.ch1.arb.build()                       transfer all arb points to device
-# dev.ch1.arb.repetitions(2)                repeat arb 2x
+# dev.ch1.arb.repetitions(2)                repeat arb 2x (***must be after build())
 # dev.ch1.arb.end_behavior('off')           turn off at end of sequence
+# dev.ch1.arb.save_to_internal              (only if you wanted to save the file)
 # dev.ch1.arb.activate_on_channel()         activate created arb for channel 1
 #      or
 # dev.ch1.arb.transfer_to_other_channel()   activate created arb for channel 2
 # dev.ch1.arb.enable()                      enable arb on channel
 # dev.ch1.on()
 
-# @TODO implement file usage, trigger
-# @TODO bug in repetitions, needs more investigation
-# Setting repetition works.  Returning the value you set works.
-# The device just seems to refuse to use the set number.
-# Repetitions can be set manually on programmed arb (on front panel).
+# @TODO implement trigger, experiment with arb storage to USB
+
 class Arbitrary:
     def __init__(self, bus, channel: str):
         self._bus = bus
@@ -900,26 +896,26 @@ class Arbitrary:
         arb_data['interpolation'] = val
         self._arb_count += 1
         if self._arb_count <= 4096:
-            self.arb_list[str(self._arb_count)] = arb_data
+            self.arb_list[self._arb_count] = arb_data
             self._arb['points'] = self._arb_count
         else:
             print('Maximum arb points reached!')
 
     def edit_point(self, point, voltage, current, dwell_time, interpolation):
-        for x in self.arb_list.keys():
-            if str(point) == x:
-                arb_data = {}
-                val = self._validate.voltage(voltage)
-                arb_data['voltage'] = val
-                val = self._validate.current(current)
-                arb_data['current'] = val
-                val = self._validate.dwell_time(dwell_time)
-                arb_data['dwell_time'] = val
-                val = self._validate.interpolation(interpolation)
-                arb_data['interpolation'] = val
-                self.arb_list[x] = arb_data
-                return None
-        return print('Arb point not found!')
+        index = int(self._validate.point(point))
+        if index <= self._arb_count:
+            arb_data = {}
+            val = self._validate.voltage(voltage)
+            arb_data['voltage'] = val
+            val = self._validate.current(current)
+            arb_data['current'] = val
+            val = self._validate.dwell_time(dwell_time)
+            arb_data['dwell_time'] = val
+            val = self._validate.interpolation(interpolation)
+            arb_data['interpolation'] = val
+            self.arb_list[index] = arb_data
+        else:
+            print('Arb point not found!')
 
     def build(self):
         arb_data = ''
@@ -956,6 +952,21 @@ class Arbitrary:
         return self._command.read_write(
             query, write, self._validate.end_behavior,
             set_end_behavior)
+
+    def save_to_int_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "' + file_name_csv + '", INT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_int_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "' + file_name_csv + '", INT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
 
 # @TODO not implemented
 class Protection:
@@ -1220,6 +1231,10 @@ class ValidateArbitrary(Validate):
     def end_behavior(self, value):
         repetition_values = ('off', 'hold')
         return self.str_tuple(repetition_values, value)
+
+    def point(self, value):
+        point_values = (1, 4096)
+        return self.halt_on_fail(self.int_rng_tuple(point_values, value))
 
 
 class ValidateChannel(Validate):
