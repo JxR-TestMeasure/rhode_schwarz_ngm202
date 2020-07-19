@@ -2,6 +2,7 @@
 
 import pyvisa
 import numpy as np
+from datetime import datetime
 
 global_input_values = {}
 
@@ -22,7 +23,7 @@ class Device:
         # Device class shortcuts
         self.com = Common(self._bus)
         self.disp = Display(self._bus)
-        # self.log = Log(self._bus, self._channel)
+        self.log = Log(self._bus)
         self.ch1 = Channel(self._bus, '1')
         if global_input_values['ch2']:
             self.ch2 = Channel(self._bus, '2')
@@ -299,7 +300,11 @@ class Display:
         self._command.write(write)
 
 
-# @TODO: 'slow' logging
+# @TODO: investigate why using Command.write() failed
+# 'enable' key does not track when log stopped after starting (fix unlikely)
+# start_time() function purpose unclear. I don't see a way to initiate a log on
+# date/time from front panel.  There is no 'mode' for date/time for logging
+# Unclear if log location is changeable remotely
 class Log:
     def __init__(self, bus):
         self._bus = bus
@@ -308,30 +313,81 @@ class Log:
 
         self._log = {}
         self._log = {
-            'enable': self.get_enable,
+            'enable': self.get_enable(),
             'mode': self.mode(),
             'count': self.count(),
+            'duration': self.duration(),
             'interval': self.interval(),
-            'file_name': self.file_name(),
-            'start_time': self.interval()}
+            'file_name': self.get_file_name(),
+            'start_time': self.get_start_time()}
         self.values = {
             'device': global_input_values,
             'settings': self._log}
-        self.log_data = {}
 
     def disable(self):
-        write = 'LOG OFF'
-        self._command.write(write)
-        self._log['enable'] = False
+        # Direct pyvisa call was required here?
+        self._bus.write('LOG 0')
+        self._log['enable'] = self.get_enable()
 
     def enable(self):
-        write = 'LOG ON'
-        self._command.write(write)
-        self._log['enable'] = True
+        # Direct pyvisa call was required here?
+        self._bus.write('LOG 1')
+        self._log['enable'] = self.get_enable()
 
     def get_enable(self):
         query = 'LOG?'
         return self._command.read(query)
+
+    def mode(self, set_mode=None):
+        query = 'LOG:MODE?'
+        write = 'LOG:MODE'
+        return self._command.read_write(
+            query, write, self._validate.mode,
+            set_mode, self._log, 'mode')
+
+    def count(self, set_count=None):
+        query = 'LOG:COUN?'
+        write = 'LOG:COUN'
+        return self._command.read_write(
+            query, write, self._validate.count,
+            set_count, self._log, 'count')
+
+    def duration(self, set_duration=None):
+        query = 'LOG:COUN?'
+        write = 'LOG:COUN'
+        return self._command.read_write(
+            query, write, self._validate.duration,
+            set_duration, self._log, 'duration')
+
+    def interval(self, set_interval=None):
+        query = 'LOG:INT?'
+        write = 'LOG:INT'
+        return self._command.read_write(
+            query, write, self._validate.interval,
+            set_interval, self._log, 'interval')
+
+    def get_file_name(self):
+        query = 'LOG:FNAM?'
+        return self._command.read(query)
+
+    # argument must be of class datetime from module datetime
+    # no further validation will be performed...
+    def set_start_time(self, date_and_time: datetime):
+        write = 'LOG:STIM '\
+                + str(date_and_time.year) + ','\
+                + str(date_and_time.month) + ','\
+                + str(date_and_time.day) + ','\
+                + str(date_and_time.hour) + ','\
+                + str(date_and_time.minute) + ','\
+                + str(date_and_time.second)
+        # Direct pyvisa call was required here?
+        self._bus.write(write)
+        self._log['start_time'] = self.get_start_time()
+
+    def get_start_time(self):
+        query = 'LOG:STIM?'
+        return self._command.read(query)
+
 
 
 class FastLog:
@@ -1366,9 +1422,10 @@ class ValidateArbitrary(ValidateChannel):
             print('Error count: ' + str(errors))
             return False
 
+
 class ValidateLog(Validate):
     def __init__(self):
-        Validate.__init__()
+        Validate.__init__(self)
 
     def count(self, value):
         count_values = (1, 10000000), ('min', 'max')
@@ -1380,7 +1437,7 @@ class ValidateLog(Validate):
 
     def interval(self, value):
         interval_values = (0.1, 600.0), ('min', 'max')
-        return self.float_rng_and_str_tuples(interval_values, value)
+        return self.float_rng_and_str_tuples(interval_values, value, 1)
 
     def mode(self, value):
         mode_values = ('UNLimited', 'COUNt', 'DURation', 'SPAN')
