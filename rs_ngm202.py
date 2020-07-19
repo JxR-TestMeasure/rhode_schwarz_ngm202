@@ -464,7 +464,7 @@ class FastLog:
 
 # Usage Example:
 # dev.ch1.arb.clear()
-# dev.ch1.arb.add.point(5, 1, 0.1, 1)  ideally run in a loop
+# dev.ch1.arb.add.point(5, 1, 0.1, 1)       ideally run in a loop
 # .
 # .
 # dev.ch1.arb.add_point(...)
@@ -497,25 +497,6 @@ class Arbitrary:
             'device': global_input_values,
             'settings': self._arb}
 
-    def __check_arb_list(self):
-        errors = 0
-        for x in self.arb_list.keys():
-            val = []
-            val.append(self._validate.voltage(float(self.arb_list[x]['voltage'])))
-            val.append(self._validate.current(float(self.arb_list[x]['current'])))
-            val.append(self._validate.dwell_time(float(self.arb_list[x]['dwell_time'])))
-            val.append(self._validate.interpolation(int(self.arb_list[x]['interpolation'])))
-            for y in val:
-                if isinstance(y, (ValueError, TypeError)):
-                    print('Point:' + str(x))
-                    print(y)
-                    errors += 1
-        if errors == 0:
-            return True
-        else:
-            print('Error count: ' + str(errors))
-            return False
-
     def disable(self):
         write = ':ARB 0'
         self._command.write(write)
@@ -539,10 +520,10 @@ class Arbitrary:
 
     def add_point(self, voltage, current, dwell_time, interpolation):
         arb_data = {}
-        arb_data['voltage'] = str(voltage)
-        arb_data['current'] = str(current)
-        arb_data['dwell_time'] = str(dwell_time)
-        arb_data['interpolation'] = str(interpolation)
+        arb_data['voltage'] = voltage
+        arb_data['current'] = current
+        arb_data['dwell_time'] = dwell_time
+        arb_data['interpolation'] = interpolation
         if self._arb_count < 4096:
             self._arb_count += 1
             self.arb_list[self._arb_count] = arb_data
@@ -553,22 +534,22 @@ class Arbitrary:
     def edit_point(self, point: int, voltage, current, dwell_time, interpolation):
         if 1 <= point <= self._arb_count:
             arb_data = {}
-            arb_data['voltage'] = str(voltage)
-            arb_data['current'] = str(current)
-            arb_data['dwell_time'] = str(dwell_time)
-            arb_data['interpolation'] = str(interpolation)
+            arb_data['voltage'] = voltage
+            arb_data['current'] = current
+            arb_data['dwell_time'] = dwell_time
+            arb_data['interpolation'] = interpolation
             self.arb_list[point] = arb_data
         else:
             print('Arb point not found!')
 
     def build(self):
-        if self.__check_arb_list():
+        if self._validate.arb_list(self.arb_list):
             arb_data = ''
             for x in self.arb_list.keys():
-                arb_data += self.arb_list[x]['voltage'] + ','
-                arb_data += self.arb_list[x]['current'] + ','
-                arb_data += self.arb_list[x]['dwell_time'] + ','
-                arb_data += self.arb_list[x]['interpolation'] + ','
+                arb_data += str(self.arb_list[x]['voltage']) + ','
+                arb_data += str(self.arb_list[x]['current']) + ','
+                arb_data += str(self.arb_list[x]['dwell_time']) + ','
+                arb_data += str(self.arb_list[x]['interpolation']) + ','
             write = 'ARB:DATA ' + arb_data[0:-1]
             self._command.write(write)
         else:
@@ -602,8 +583,7 @@ class Arbitrary:
         write = 'ARB:SAVE'
         self._command.write(write)
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
+    # You must still use transfer() to activate on channel
     def load_from_internal(self, file_name_csv: str):
         write = 'ARB:FNAME "' + file_name_csv + '", INT'
         self._command.write(write)
@@ -630,8 +610,7 @@ class Arbitrary:
         write = 'ARB:SAVE'
         self._command.write(write)
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
+    # You must still use transfer() to activate on channel
     def load_from_front_usb(self, file_name_csv: str):
         write = 'ARB:FNAME "'\
                 + '/USB1A/'\
@@ -642,8 +621,7 @@ class Arbitrary:
         write = 'ARB:LOAD'
         self._command.write(write)
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
+    # You must still use transfer() to activate on channel
     def load_from_rear_usb(self, file_name_csv: str):
         write = 'ARB:FNAME "'\
                 + '/USB2A/'\
@@ -1369,6 +1347,24 @@ class ValidateArbitrary(ValidateChannel):
         channel_values = (1, 2), ('1', '2')
         return self.int_and_str_tuples(channel_values, value)
 
+    def arb_list(self, arb_list: dict):
+        errors = 0
+        for x in arb_list.keys():
+            val = []
+            val.append(self.voltage(arb_list[x]['voltage']))
+            val.append(self.current(arb_list[x]['current']))
+            val.append(self.dwell_time(arb_list[x]['dwell_time']))
+            val.append(self.interpolation(arb_list[x]['interpolation']))
+            for y in val:
+                if isinstance(y, (ValueError, TypeError)):
+                    print('Point:' + str(x))
+                    print(self.error_text('WARNING', y))
+                    errors += 1
+        if errors == 0:
+            return True
+        else:
+            print('Error count: ' + str(errors))
+            return False
 
 class ValidateLog(Validate):
     def __init__(self):
