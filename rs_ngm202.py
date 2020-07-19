@@ -875,7 +875,7 @@ class Arbitrary:
     def enable(self):
         write = ':ARB 1'
         self._command.write(write)
-        self._arb['points'] = self.get_enable()
+        self._arb['enable'] = self.get_enable()
 
     def get_enable(self):
         query = ':ARB?'
