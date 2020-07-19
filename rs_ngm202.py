@@ -22,6 +22,7 @@ class Device:
         # Device class shortcuts
         self.com = Common(self._bus)
         self.disp = Display(self._bus)
+        # self.log = Log(self._bus, self._channel)
         self.ch1 = Channel(self._bus, '1')
         if global_input_values['ch2']:
             self.ch2 = Channel(self._bus, '2')
@@ -174,7 +175,8 @@ class Channel:
 
         # Channel objects
         self.arb = Arbitrary(self._bus, self._channel)
-        self.flog = FastLog(self._bus, self._channel)
+        if global_input_values['expanded_features']:
+            self.flog = FastLog(self._bus, self._channel)
         self.meas = Measure(self._bus, self._channel)
 
     # ##########################
@@ -388,13 +390,43 @@ class Display:
 
 # @TODO: 'slow' logging
 class Log:
-    pass
+    def __init__(self, bus):
+        self._bus = bus
+        self._command = Command(self._bus)
+        self._validate = ValidateLog()
+
+        self._log = {}
+        self._log = {
+            'enable': self.get_enable,
+            'mode': self.mode(),
+            'count': self.count(),
+            'interval': self.interval(),
+            'file_name': self.file_name(),
+            'start_time': self.interval()}
+        self.values = {
+            'device': global_input_values,
+            'settings': self._log}
+        self.log_data = {}
+
+    def disable(self):
+        write = 'LOG OFF'
+        self._command.write(write)
+        self._log['enable'] = False
+
+    def enable(self):
+        write = 'LOG ON'
+        self._command.write(write)
+        self._log['enable'] = True
+
+    def get_enable(self):
+        query = 'LOG?'
+        return self._command.read(query)
 
 
 class FastLog:
     def __init__(self, bus, channel):
         self._bus = bus
-        self._validate = ValidateLog()
+        self._validate = ValidateFastLog()
         self._channel = channel
         self._command = Command(self._bus, self._channel)
         self._flog_enable = False if self.get_enable() == '0' else True
@@ -846,7 +878,8 @@ class Battery:
 # dev.ch1.arb.enable()                      enable arb on channel
 # dev.ch1.on()
 
-# @TODO implement trigger, experiment with arb storage to USB
+# @TODO implement trigger
+
 
 class Arbitrary:
     def __init__(self, bus, channel: str):
@@ -963,6 +996,50 @@ class Arbitrary:
     # or transfer_to_other_channel after loading file
     def load_from_int_storage(self, file_name_csv: str):
         write = 'ARB:FNAME "' + file_name_csv + '", INT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
+    def save_to_front_usb_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB1A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    def save_to_rear_usb_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB2A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_front_usb_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB1A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_rear_usb_storage(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB2A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
         self._command.write(write)
         write = 'ARB:LOAD'
         self._command.write(write)
@@ -1200,42 +1277,6 @@ class Validate:
         else:
             return value
 
-class ValidateArbitrary(Validate):
-    def __init__(self):
-        Validate().__init__()
-
-    def voltage(self, value):
-        voltage_values = (0.0, 20.0)
-        return self.halt_on_fail(self.float_rng_tuple(voltage_values, value, 3))
-
-    def current(self, value):
-        current_values = (0.001, 6.0)
-        return self.halt_on_fail(self.float_rng_tuple(current_values, value, 4))
-
-    def dwell_time(self, value):
-        dwell_time_values = (0.001, 1728000.0)
-        return self.halt_on_fail(self.float_rng_tuple(dwell_time_values, value, 3))
-
-    def interpolation(self, value):
-        interpolation_values = (0, 1)
-        return self.halt_on_fail(self.int_tuple(interpolation_values, value))
-
-    def channel(self, value):
-        channel_values = ('1', '2')
-        return self.str_tuple(channel_values, value)
-
-    def repetition(self, value):
-        repetition_values = (0, 65535)
-        return self.int_rng_tuple(repetition_values, value)
-
-    def end_behavior(self, value):
-        repetition_values = ('off', 'hold')
-        return self.str_tuple(repetition_values, value)
-
-    def point(self, value):
-        point_values = (1, 4096)
-        return self.halt_on_fail(self.int_rng_tuple(point_values, value))
-
 
 class ValidateChannel(Validate):
     def __init__(self):
@@ -1286,6 +1327,84 @@ class ValidateChannel(Validate):
         return self.float_rng_and_str_tuples(ramp_duration_values, value, 2)
 
 
+class ValidateArbitrary(ValidateChannel):
+    def __init__(self):
+        ValidateChannel.__init__(self)
+
+    def voltage(self, value):
+        voltage_values = (0.0, 20.0)
+        return self.halt_on_fail(self.float_rng_tuple(voltage_values, value, 3))
+
+    def current(self, value):
+        current_values = (0.001, 6.0)
+        return self.halt_on_fail(self.float_rng_tuple(current_values, value, 4))
+
+    def dwell_time(self, value):
+        dwell_time_values = (0.001, 1728000.0)
+        return self.halt_on_fail(self.float_rng_tuple(dwell_time_values, value, 3))
+
+    def interpolation(self, value):
+        interpolation_values = (0, 1)
+        return self.halt_on_fail(self.int_tuple(interpolation_values, value))
+
+    def repetition(self, value):
+        repetition_values = (0, 65535)
+        return self.int_rng_tuple(repetition_values, value)
+
+    def end_behavior(self, value):
+        repetition_values = ('off', 'hold')
+        return self.str_tuple(repetition_values, value)
+
+    def point(self, value):
+        point_values = (1, 4096)
+        return self.halt_on_fail(self.int_rng_tuple(point_values, value))
+
+
+class ValidateLog(Validate):
+    def __init__(self):
+        Validate.__init__()
+
+    def count(self, value):
+        count_values = (1, 10000000), ('min', 'max')
+        return self.int_rng_and_str_tuples(count_values, value)
+
+    def duration(self, value):
+        duration_values = (1, 349000), ('min', 'max')
+        return self.int_rng_and_str_tuples(duration_values, value)
+
+    def interval(self, value):
+        interval_values = (0.1, 600.0), ('min', 'max')
+        return self.float_rng_and_str_tuples(interval_values, value)
+
+    def mode(self, value):
+        mode_values = ('UNLimited', 'COUNt', 'DURation', 'SPAN')
+        return self.str_tuple(mode_values, value)
+
+    def year(self, value):
+        year_values = (2020, 2099)
+        return self.int_rng_tuple(year_values, value)
+
+    def month(self, value):
+        month_values = (1, 12)
+        return self.int_rng_tuple(month_values, value)
+
+    def day(self, value):
+        day_values = (1, 31)
+        return self.int_rng_tuple(day_values, value)
+
+    def hour(self, value):
+        hour_values = (0, 23)
+        return self.int_rng_tuple(hour_values, value)
+
+    def min_sec(self, value):
+        min_sec_values = (0, 59)
+        return self.int_rng_tuple(min_sec_values, value)
+
+    def on_off(self, value):
+        on_off_values = (0, 1), ('on', 'off')
+        return self.int_rng_and_str_tuples(on_off_values, value)
+
+
 class ValidateDisplay(Validate):
     def __init__(self):
         Validate().__init__()
@@ -1295,7 +1414,7 @@ class ValidateDisplay(Validate):
         return self.float_rng_and_str_tuples(channel_values, value, 1)
 
 
-class ValidateLog(Validate):
+class ValidateFastLog(Validate):
     def __init__(self):
         Validate().__init__()
 
@@ -1325,54 +1444,6 @@ class ValidateRegister(Validate):
     def preset(self, value):
         preset_values = (0, 9)
         return self.int_rng_tuple(preset_values, value)
-
-
-class ValidateTrigger(Validate):
-    def __init__(self):
-        Validate().__init__()
-
-    def source (self, value):
-        source_values = ('int', 'ext', 'min',
-                         'max', 'def', 'default'
-                         )
-        return self.str_tuple(source_values, value)
-
-    def level_low(self, value):
-        level_low_values = (0, 0.5), ('auto', 'min', 'max',
-                                      'def', 'default'
-                                      )
-        return self.float_rng_and_str_tuples(level_low_values, value, 3)
-
-    def level_high(self, value):
-        level_high_values = (0, 7.0), ('auto', 'min', 'max',
-                                       'def', 'default'
-                                       )
-        return self.float_rng_and_str_tuples(level_high_values, value, 3)
-
-    def level_dvm(self, value):
-        level_dvm_values = (-5.999, 25.0), ('auto', 'min', 'max',
-                                            'def', 'default'
-                                            )
-        return self.float_rng_and_str_tuples(level_dvm_values, value, 3)
-
-    def count(self, value):
-        count_values = (1, 100), ('min', 'max', 'def', 'default')
-        return self.int_rng_and_str_tuples(count_values, value)
-
-    def slope(self, value):
-        slope_values = ('pos', 'neg', 'min',
-                        'max', 'def', 'default'
-                        )
-        return self.str_tuple(slope_values, value)
-
-    def offset(self, value):
-        offset_values = (-5000, 50000), ('min', 'max', 'def', 'default')
-        return self.int_rng_and_str_tuples(offset_values, value)
-
-    def timeout(self, value):
-        timeout_values = (0.001, 60), ('inf', 'min', 'max',
-                                       'def', 'default')
-        return self.float_rng_and_str_tuples(timeout_values, value, 3)
 
 
 class Command(Validate):
