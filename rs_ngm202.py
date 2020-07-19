@@ -497,6 +497,25 @@ class Arbitrary:
             'device': global_input_values,
             'settings': self._arb}
 
+    def __check_arb_list(self):
+        errors = 0
+        for x in self.arb_list.keys():
+            val = []
+            val.append(self._validate.voltage(float(self.arb_list[x]['voltage'])))
+            val.append(self._validate.current(float(self.arb_list[x]['current'])))
+            val.append(self._validate.dwell_time(float(self.arb_list[x]['dwell_time'])))
+            val.append(self._validate.interpolation(int(self.arb_list[x]['interpolation'])))
+            for y in val:
+                if isinstance(y, (ValueError, TypeError)):
+                    print('Point:' + str(x))
+                    print(y)
+                    errors += 1
+        if errors == 0:
+            return True
+        else:
+            print('Error count: ' + str(errors))
+            return False
+
     def disable(self):
         write = ':ARB 0'
         self._command.write(write)
@@ -520,46 +539,40 @@ class Arbitrary:
 
     def add_point(self, voltage, current, dwell_time, interpolation):
         arb_data = {}
-        val = self._validate.voltage(voltage)
-        arb_data['voltage'] = val
-        val = self._validate.current(current)
-        arb_data['current'] = val
-        val = self._validate.dwell_time(dwell_time)
-        arb_data['dwell_time'] = val
-        val = self._validate.interpolation(interpolation)
-        arb_data['interpolation'] = val
-        self._arb_count += 1
-        if self._arb_count <= 4096:
+        arb_data['voltage'] = str(voltage)
+        arb_data['current'] = str(current)
+        arb_data['dwell_time'] = str(dwell_time)
+        arb_data['interpolation'] = str(interpolation)
+        if self._arb_count < 4096:
+            self._arb_count += 1
             self.arb_list[self._arb_count] = arb_data
             self._arb['points'] = self._arb_count
         else:
             print('Maximum arb points reached!')
 
-    def edit_point(self, point, voltage, current, dwell_time, interpolation):
-        index = int(self._validate.point(point))
-        if index <= self._arb_count:
+    def edit_point(self, point: int, voltage, current, dwell_time, interpolation):
+        if 1 <= point <= self._arb_count:
             arb_data = {}
-            val = self._validate.voltage(voltage)
-            arb_data['voltage'] = val
-            val = self._validate.current(current)
-            arb_data['current'] = val
-            val = self._validate.dwell_time(dwell_time)
-            arb_data['dwell_time'] = val
-            val = self._validate.interpolation(interpolation)
-            arb_data['interpolation'] = val
-            self.arb_list[index] = arb_data
+            arb_data['voltage'] = str(voltage)
+            arb_data['current'] = str(current)
+            arb_data['dwell_time'] = str(dwell_time)
+            arb_data['interpolation'] = str(interpolation)
+            self.arb_list[point] = arb_data
         else:
             print('Arb point not found!')
 
     def build(self):
-        arb_data = ''
-        for x in self.arb_list.keys():
-            arb_data += self.arb_list[x]['voltage'] + ','
-            arb_data += self.arb_list[x]['current'] + ','
-            arb_data += self.arb_list[x]['dwell_time'] + ','
-            arb_data += self.arb_list[x]['interpolation'] + ','
-        write = 'ARB:DATA ' + arb_data[0:-1]
-        self._command.write(write)
+        if self.__check_arb_list():
+            arb_data = ''
+            for x in self.arb_list.keys():
+                arb_data += self.arb_list[x]['voltage'] + ','
+                arb_data += self.arb_list[x]['current'] + ','
+                arb_data += self.arb_list[x]['dwell_time'] + ','
+                arb_data += self.arb_list[x]['interpolation'] + ','
+            write = 'ARB:DATA ' + arb_data[0:-1]
+            self._command.write(write)
+        else:
+            print('Unable to build arb list')
 
     def transfer(self, channel=None):
         if channel is None:
@@ -1330,19 +1343,19 @@ class ValidateArbitrary(ValidateChannel):
 
     def voltage(self, value):
         voltage_values = (0.0, 20.0)
-        return self.halt_on_fail(self.float_rng_tuple(voltage_values, value, 3))
+        return self.float_rng_tuple(voltage_values, value, 3)
 
     def current(self, value):
         current_values = (0.001, 6.0)
-        return self.halt_on_fail(self.float_rng_tuple(current_values, value, 4))
+        return self.float_rng_tuple(current_values, value, 4)
 
     def dwell_time(self, value):
         dwell_time_values = (0.001, 1728000.0)
-        return self.halt_on_fail(self.float_rng_tuple(dwell_time_values, value, 3))
+        return self.float_rng_tuple(dwell_time_values, value, 3)
 
     def interpolation(self, value):
         interpolation_values = (0, 1)
-        return self.halt_on_fail(self.int_tuple(interpolation_values, value))
+        return self.int_tuple(interpolation_values, value)
 
     def repetition(self, value):
         repetition_values = (0, 65535)
@@ -1351,10 +1364,6 @@ class ValidateArbitrary(ValidateChannel):
     def end_behavior(self, value):
         repetition_values = ('off', 'hold')
         return self.str_tuple(repetition_values, value)
-
-    def point(self, value):
-        point_values = (1, 4096)
-        return self.halt_on_fail(self.int_rng_tuple(point_values, value))
 
     def channel(self, value):
         channel_values = (1, 2), ('1', '2')
