@@ -53,95 +53,6 @@ class Device:
         self._command.write(write)
 
 
-class Common:
-    def __init__(self, bus):
-        self._bus = bus
-        self._validate = ValidateRegister()
-        self._command = Command(self._bus)
-
-    # Clears event registers and errors
-    def cls(self):
-        write = "*CLS"
-        self._command.write(write)
-
-    # Read standard event enable register (no param)
-    # Write with param
-    def ese(self, reg_value=None):
-        query = '*ESE?'
-        write = '*ESE'
-        return self._command.read_write(
-            query, write, self._validate.register_8,
-            reg_value)
-
-    # Read and clear standard event enable register
-    def esr(self):
-        query = "*ESR?"
-        return self._command.read(query)
-
-    # Read instrument identification
-    def idn(self):
-        query = "*IDN?"
-        return self._command.read(query)
-
-    # Set the operation complete bit in the standard event register or queue
-    # (param=1) places into output queue when operation complete
-    def opc(self, reg_value=None):
-        query = '*OPC?'
-        write = '*OPC'
-        return self._command.read_write(
-            query, write, None, reg_value)
-
-    # Returns the power supply to the saved setup (0...9)
-    def rcl(self, preset_value=None):
-        query = '*RCL?'
-        write = '*RCL'
-        return self._command.read_write(
-            query, write, self._validate.preset,
-            preset_value)
-
-    # Returns the power supply to the *RST default conditions
-    def rst(self):
-        write = "*RST"
-        self._command.write(write)
-        self.cls()
-
-    # Saves the present setup (1..9)
-    def sav(self, preset_value=None):
-        query = '*SAV?'
-        write = '*SAV'
-        return self._command.read_write(
-            query, write, self._validate.preset,
-            preset_value)
-
-    # Programs the service request enable register
-    def sre(self, reg_value=None):
-        query = '*SRE?'
-        write = '*SRE'
-        return self._command.read_write(
-            query, write, self._validate.register_8,
-            reg_value)
-
-    # Reads the status byte register
-    def stb(self):
-        query = "*STB?"
-        return self._command.read(query)
-
-    # command to trigger
-    def trg(self):
-        write = "*TRG"
-        self._command.write(write)
-
-    # Waits until all previous commands are executed
-    def wait(self):
-        write = "*WAI"
-        self._command.write(write)
-
-    # Perform self-tests
-    def tst(self):
-        query = "*TST"
-        return self._command.read(query)
-
-
 class Channel:
     def __init__(self, bus, channel):
         self._bus = bus
@@ -551,6 +462,188 @@ class FastLog:
                 self._flog['sample_time'])
 
 
+# Usage Example:
+# dev.ch1.arb.clear()
+# dev.ch1.arb.add.point(5, 1, 0.1, 1)  ideally run in a loop
+# .
+# .
+# dev.ch1.arb.add_point(...)
+# dev.ch1.arb.edit_point(1024,....)         opps point 1024 is wrong (not necessary step)
+# dev.ch1.arb.build()                       transfer all arb points to device
+# dev.ch1.arb.repetitions(2)                repeat arb 2x (***must be after build())
+# dev.ch1.arb.end_behavior('off')           turn off at end of sequence
+# dev.ch1.arb.save_to_internal              (only if you wanted to save the file)
+# dev.ch1.arb.transfer()                    transfer created arb for channel 1
+#      or
+# dev.ch1.arb.transfer(1)                   transfer created arb to channel 1
+# dev.ch1.arb.transfer(2)                   activate created arb for channel 2
+# dev.ch1.arb.enable()                      enable arb on channel
+# dev.ch1.on()
+
+# @TODO implement trigger
+
+
+# @TODO not implemented
+class Arbitrary:
+    def __init__(self, bus, channel: str):
+        self._bus = bus
+        self._channel = channel
+        self._validate = ValidateArbitrary()
+        self._command = Command(self._bus, self._channel)
+        self._arb_count = 0
+        self.arb_list = {}
+        self._arb = {}
+        self._arb = {'enable': self.get_enable(),
+                     'points': self._arb_count}
+        self.values = {
+            'device': global_input_values,
+            'settings': self._arb}
+
+    def disable(self):
+        write = ':ARB 0'
+        self._command.write(write)
+        self._arb['enable'] = self.get_enable()
+
+    def enable(self):
+        write = ':ARB 1'
+        self._command.write(write)
+        self._arb['enable'] = self.get_enable()
+
+    def get_enable(self):
+        query = ':ARB?'
+        return self._command.read(query)
+
+    def clear(self):
+        self.arb_list.clear()
+        self._arb_count = 0
+        self._arb['points'] = self._arb_count
+        write = 'ARB:CLE'
+        self._command.write(write)
+
+    def add_point(self, voltage, current, dwell_time, interpolation):
+        arb_data = {}
+        val = self._validate.voltage(voltage)
+        arb_data['voltage'] = val
+        val = self._validate.current(current)
+        arb_data['current'] = val
+        val = self._validate.dwell_time(dwell_time)
+        arb_data['dwell_time'] = val
+        val = self._validate.interpolation(interpolation)
+        arb_data['interpolation'] = val
+        self._arb_count += 1
+        if self._arb_count <= 4096:
+            self.arb_list[self._arb_count] = arb_data
+            self._arb['points'] = self._arb_count
+        else:
+            print('Maximum arb points reached!')
+
+    def edit_point(self, point, voltage, current, dwell_time, interpolation):
+        index = int(self._validate.point(point))
+        if index <= self._arb_count:
+            arb_data = {}
+            val = self._validate.voltage(voltage)
+            arb_data['voltage'] = val
+            val = self._validate.current(current)
+            arb_data['current'] = val
+            val = self._validate.dwell_time(dwell_time)
+            arb_data['dwell_time'] = val
+            val = self._validate.interpolation(interpolation)
+            arb_data['interpolation'] = val
+            self.arb_list[index] = arb_data
+        else:
+            print('Arb point not found!')
+
+    def build(self):
+        arb_data = ''
+        for x in self.arb_list.keys():
+            arb_data += self.arb_list[x]['voltage'] + ','
+            arb_data += self.arb_list[x]['current'] + ','
+            arb_data += self.arb_list[x]['dwell_time'] + ','
+            arb_data += self.arb_list[x]['interpolation'] + ','
+        write = 'ARB:DATA ' + arb_data[0:-1]
+        self._command.write(write)
+
+    def transfer(self, channel=None):
+        if channel is None:
+            write = 'ARB:TRAN ' + self._channel
+            self._command.write(write)
+        else:
+            write = 'ARB:TRAN'
+            self._command.write_value(write, self._validate.channel, channel)
+
+    def repetitions(self, set_num_repeats=None):
+        query = 'ARB:REP?'
+        write = 'ARB:REP'
+        return self._command.read_write(
+            query, write, self._validate.repetition,
+            set_num_repeats)
+
+    def end_behavior(self, set_end_behavior=None):
+        query = 'ARB:BEH:END?'
+        write = 'ARB:BEH:END'
+        return self._command.read_write(
+            query, write, self._validate.end_behavior,
+            set_end_behavior)
+
+    def save_to_internal(self, file_name_csv: str):
+        write = 'ARB:FNAME "' + file_name_csv + '", INT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_internal(self, file_name_csv: str):
+        write = 'ARB:FNAME "' + file_name_csv + '", INT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
+    def save_to_front_usb(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB1A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    def save_to_rear_usb(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB2A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:SAVE'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_front_usb(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB1A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
+    # You must still use activate_on_channel
+    # or transfer_to_other_channel after loading file
+    def load_from_rear_usb(self, file_name_csv: str):
+        write = 'ARB:FNAME "'\
+                + '/USB2A/'\
+                + global_input_values['model']\
+                + '/arb/'\
+                + file_name_csv + '", EXT'
+        self._command.write(write)
+        write = 'ARB:LOAD'
+        self._command.write(write)
+
+
 class Measure:
     def __init__(self, bus, channel):
         self._bus = bus
@@ -676,6 +769,35 @@ class Measure:
     def get_stats_count(self):
         query = ':MEAS:STAT:COUN?'
         return self._command.read(query)
+
+
+# @TODO not implemented
+class Battery:
+    def __init__(self, bus):
+        self._bus = bus
+    pass
+
+
+class Protection:
+    def __init__(self, bus, channel):
+        self._bus = bus
+        self._channel = channel
+    pass
+
+
+# @TODO not implemented
+class DigitalIO:
+    def __init__(self, bus, channel):
+        self._bus = bus
+        self._channel = channel
+    pass
+
+
+# @TODO not implemented
+class Trigger:
+    def __init__(self, bus):
+        self._bus = bus
+    pass
 
 
 class Status:
@@ -855,217 +977,93 @@ class Status:
             reg_value)
 
 
-# @TODO not implemented
-class Battery:
+class Common:
     def __init__(self, bus):
         self._bus = bus
-    pass
+        self._validate = ValidateRegister()
+        self._command = Command(self._bus)
 
-# Usage Example:
-# dev.ch1.arb.clear()
-# dev.ch1.arb.add.point(5, 1, 0.1, 1)  ideally run in a loop
-# .
-# .
-# dev.ch1.arb.add_point(...)
-# dev.ch1.arb.edit_point(1024,....)         opps point 1024 is wrong (not necessary step)
-# dev.ch1.arb.build()                       transfer all arb points to device
-# dev.ch1.arb.repetitions(2)                repeat arb 2x (***must be after build())
-# dev.ch1.arb.end_behavior('off')           turn off at end of sequence
-# dev.ch1.arb.save_to_internal              (only if you wanted to save the file)
-# dev.ch1.arb.activate_on_channel()         activate created arb for channel 1
-#      or
-# dev.ch1.arb.transfer_to_other_channel()   activate created arb for channel 2
-# dev.ch1.arb.enable()                      enable arb on channel
-# dev.ch1.on()
-
-# @TODO implement trigger
-
-
-class Arbitrary:
-    def __init__(self, bus, channel: str):
-        self._bus = bus
-        self._channel = channel
-        self._validate = ValidateArbitrary()
-        self._command = Command(self._bus, self._channel)
-        self._arb_count = 0
-        self.arb_list = {}
-        self._arb = {}
-        self._arb = {'enable': self.get_enable(),
-                     'points': self._arb_count}
-        self.values = {
-            'device': global_input_values,
-            'settings': self._arb}
-
-    def disable(self):
-        write = ':ARB 0'
+    # Clears event registers and errors
+    def cls(self):
+        write = "*CLS"
         self._command.write(write)
-        self._arb['enable'] = self.get_enable()
 
-    def enable(self):
-        write = ':ARB 1'
-        self._command.write(write)
-        self._arb['enable'] = self.get_enable()
+    # Read standard event enable register (no param)
+    # Write with param
+    def ese(self, reg_value=None):
+        query = '*ESE?'
+        write = '*ESE'
+        return self._command.read_write(
+            query, write, self._validate.register_8,
+            reg_value)
 
-    def get_enable(self):
-        query = ':ARB?'
+    # Read and clear standard event enable register
+    def esr(self):
+        query = "*ESR?"
         return self._command.read(query)
 
-    def clear(self):
-        self.arb_list.clear()
-        self._arb_count = 0
-        self._arb['points'] = self._arb_count
-        write = 'ARB:CLE'
-        self._command.write(write)
+    # Read instrument identification
+    def idn(self):
+        query = "*IDN?"
+        return self._command.read(query)
 
-    def add_point(self, voltage, current, dwell_time, interpolation):
-        arb_data = {}
-        val = self._validate.voltage(voltage)
-        arb_data['voltage'] = val
-        val = self._validate.current(current)
-        arb_data['current'] = val
-        val = self._validate.dwell_time(dwell_time)
-        arb_data['dwell_time'] = val
-        val = self._validate.interpolation(interpolation)
-        arb_data['interpolation'] = val
-        self._arb_count += 1
-        if self._arb_count <= 4096:
-            self.arb_list[self._arb_count] = arb_data
-            self._arb['points'] = self._arb_count
-        else:
-            print('Maximum arb points reached!')
-
-    def edit_point(self, point, voltage, current, dwell_time, interpolation):
-        index = int(self._validate.point(point))
-        if index <= self._arb_count:
-            arb_data = {}
-            val = self._validate.voltage(voltage)
-            arb_data['voltage'] = val
-            val = self._validate.current(current)
-            arb_data['current'] = val
-            val = self._validate.dwell_time(dwell_time)
-            arb_data['dwell_time'] = val
-            val = self._validate.interpolation(interpolation)
-            arb_data['interpolation'] = val
-            self.arb_list[index] = arb_data
-        else:
-            print('Arb point not found!')
-
-    def build(self):
-        arb_data = ''
-        for x in self.arb_list.keys():
-            arb_data += self.arb_list[x]['voltage'] + ','
-            arb_data += self.arb_list[x]['current'] + ','
-            arb_data += self.arb_list[x]['dwell_time'] + ','
-            arb_data += self.arb_list[x]['interpolation'] + ','
-        write = 'ARB:DATA ' + arb_data[0:-1]
-        self._command.write(write)
-
-    def activate_on_channel(self):
-        write = 'ARB:TRAN ' + self._channel
-        self._command.write(write)
-
-    def transfer_to_other_channel(self):
-        if self._channel == '1':
-            channel = '2'
-        else:
-            channel = '1'
-        write = 'ARB:TRAN ' + channel
-        self._command.write(write)
-
-    def repetitions(self, set_num_repeats=None):
-        query = 'ARB:REP?'
-        write = 'ARB:REP'
+    # Set the operation complete bit in the standard event register or queue
+    # (param=1) places into output queue when operation complete
+    def opc(self, reg_value=None):
+        query = '*OPC?'
+        write = '*OPC'
         return self._command.read_write(
-            query, write, self._validate.repetition,
-            set_num_repeats)
+            query, write, None, reg_value)
 
-    def end_behavior(self, set_end_behavior=None):
-        query = 'ARB:BEH:END?'
-        write = 'ARB:BEH:END'
+    # Returns the power supply to the saved setup (0...9)
+    def rcl(self, preset_value=None):
+        query = '*RCL?'
+        write = '*RCL'
         return self._command.read_write(
-            query, write, self._validate.end_behavior,
-            set_end_behavior)
+            query, write, self._validate.preset,
+            preset_value)
 
-    def save_to_int_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "' + file_name_csv + '", INT'
+    # Returns the power supply to the *RST default conditions
+    def rst(self):
+        write = "*RST"
         self._command.write(write)
-        write = 'ARB:SAVE'
-        self._command.write(write)
+        self.cls()
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
-    def load_from_int_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "' + file_name_csv + '", INT'
-        self._command.write(write)
-        write = 'ARB:LOAD'
-        self._command.write(write)
+    # Saves the present setup (1..9)
+    def sav(self, preset_value=None):
+        query = '*SAV?'
+        write = '*SAV'
+        return self._command.read_write(
+            query, write, self._validate.preset,
+            preset_value)
 
-    def save_to_front_usb_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "'\
-                + '/USB1A/'\
-                + global_input_values['model']\
-                + '/arb/'\
-                + file_name_csv + '", EXT'
-        self._command.write(write)
-        write = 'ARB:SAVE'
-        self._command.write(write)
+    # Programs the service request enable register
+    def sre(self, reg_value=None):
+        query = '*SRE?'
+        write = '*SRE'
+        return self._command.read_write(
+            query, write, self._validate.register_8,
+            reg_value)
 
-    def save_to_rear_usb_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "'\
-                + '/USB2A/'\
-                + global_input_values['model']\
-                + '/arb/'\
-                + file_name_csv + '", EXT'
-        self._command.write(write)
-        write = 'ARB:SAVE'
+    # Reads the status byte register
+    def stb(self):
+        query = "*STB?"
+        return self._command.read(query)
+
+    # command to trigger
+    def trg(self):
+        write = "*TRG"
         self._command.write(write)
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
-    def load_from_front_usb_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "'\
-                + '/USB1A/'\
-                + global_input_values['model']\
-                + '/arb/'\
-                + file_name_csv + '", EXT'
-        self._command.write(write)
-        write = 'ARB:LOAD'
+    # Waits until all previous commands are executed
+    def wait(self):
+        write = "*WAI"
         self._command.write(write)
 
-    # You must still use activate_on_channel
-    # or transfer_to_other_channel after loading file
-    def load_from_rear_usb_storage(self, file_name_csv: str):
-        write = 'ARB:FNAME "'\
-                + '/USB2A/'\
-                + global_input_values['model']\
-                + '/arb/'\
-                + file_name_csv + '", EXT'
-        self._command.write(write)
-        write = 'ARB:LOAD'
-        self._command.write(write)
-
-
-# @TODO not implemented
-class Protection:
-    def __init__(self, bus, channel):
-        self._bus = bus
-        self._channel = channel
-    pass
-
-
-# @TODO not implemented
-class DigitalIO:
-    def __init__(self, bus, channel):
-        self._bus = bus
-        self._channel = channel
-    pass
-
-
-# @TODO not implemented
-class Trigger:
-    def __init__(self, bus):
-        self._bus = bus
-    pass
+    # Perform self-tests
+    def tst(self):
+        query = "*TST"
+        return self._command.read(query)
 
 
 class Validate:
@@ -1358,6 +1356,10 @@ class ValidateArbitrary(ValidateChannel):
     def point(self, value):
         point_values = (1, 4096)
         return self.halt_on_fail(self.int_rng_tuple(point_values, value))
+
+    def channel(self, value):
+        channel_values = (1, 2), ('1', '2')
+        return self.int_and_str_tuples(channel_values, value)
 
 
 class ValidateLog(Validate):
