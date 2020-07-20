@@ -292,7 +292,7 @@ class Display:
             set_brightness, self._disp, 'brightness')
 
     def set_message(self, message):
-        write = 'DISP:TEXT ' + str(message)
+        write = 'DISP:TEXT "' + str(message) + '"'
         self._command.write(write)
 
     def clear_message(self):
@@ -300,7 +300,7 @@ class Display:
         self._command.write(write)
 
 
-# @TODO: investigate why using Command.write() failed
+# @TODO: Investigate triggering and LOG:STIM command
 # 'enable' key does not track when log stopped after starting (fix unlikely)
 # start_time() function purpose unclear. I don't see a way to initiate a log on
 # date/time from front panel.  There is no 'mode' for date/time for logging
@@ -1442,26 +1442,6 @@ class ValidateLog(Validate):
     def mode(self, value):
         mode_values = ('UNLimited', 'COUNt', 'DURation', 'SPAN')
         return self.str_tuple(mode_values, value)
-
-    def year(self, value):
-        year_values = (2020, 2099)
-        return self.int_rng_tuple(year_values, value)
-
-    def month(self, value):
-        month_values = (1, 12)
-        return self.int_rng_tuple(month_values, value)
-
-    def day(self, value):
-        day_values = (1, 31)
-        return self.int_rng_tuple(day_values, value)
-
-    def hour(self, value):
-        hour_values = (0, 23)
-        return self.int_rng_tuple(hour_values, value)
-
-    def min_sec(self, value):
-        min_sec_values = (0, 59)
-        return self.int_rng_tuple(min_sec_values, value)
 
     def on_off(self, value):
         on_off_values = (0, 1), ('on', 'off')
