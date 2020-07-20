@@ -326,12 +326,12 @@ class Log:
 
     def disable(self):
         # Direct pyvisa call was required here?
-        self._bus.write('LOG 0')
+        self._command.write('LOG 0')
         self._log['enable'] = self.get_enable()
 
     def enable(self):
         # Direct pyvisa call was required here?
-        self._bus.write('LOG 1')
+        self._command.write('LOG 1')
         self._log['enable'] = self.get_enable()
 
     def get_enable(self):
@@ -381,7 +381,7 @@ class Log:
                 + str(date_and_time.minute) + ','\
                 + str(date_and_time.second)
         # Direct pyvisa call was required here?
-        self._bus.write(write)
+        self._command.write(write)
         self._log['start_time'] = self.get_start_time()
 
     def get_start_time(self):
@@ -1553,14 +1553,14 @@ class Command(Validate):
     def write(self, write: str, validator=None):
         if self._channel is not None:
             self.set_channel()
-            if validator is None:
-                self._bus.write(write)
+        if validator is None:
+            self._bus.write(write)
+        else:
+            val = validator
+            if isinstance(val, (ValueError, TypeError)):
+                print(self.error_text('WARNING', val))
             else:
-                val = validator
-                if isinstance(val, (ValueError, TypeError)):
-                    print(self.error_text('WARNING', val))
-                else:
-                    self._bus.write(write)
+                self._bus.write(write)
 
     def write_value(self, write: str,
                    validator=None, value=None):
