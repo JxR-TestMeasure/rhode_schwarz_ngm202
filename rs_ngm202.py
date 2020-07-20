@@ -413,28 +413,27 @@ class Log:
         number_samples = result_array.__len__() - 18
         self.log_data['seconds'] = np.arange(0, interval * number_samples, interval)
         v1 = []
-        v2 = []
         i1 = []
-        i2 = []
         p1 = []
+        v2 = []
+        i2 = []
         p2 = []
         for samples_text in meas_array:
             samples = samples_text.split(',')
             v1.append(np.single(samples[1]))
             i1.append(np.single(samples[2]))
             p1.append(np.single(samples[3]))
-            v2.append(np.single(samples[4]))
-            i2.append(np.single(samples[5]))
-            p2.append(np.single(samples[6]))
+            if global_input_values['ch2']:
+                v2.append(np.single(samples[4]))
+                i2.append(np.single(samples[5]))
+                p2.append(np.single(samples[6]))
         self.log_data['voltage_ch1'] = np.array(v1)
         self.log_data['current_ch1'] = np.array(i1)
         self.log_data['power_ch1'] = np.array(p1)
-        self.log_data['voltage_ch2'] = np.array(v2)
-        self.log_data['current_ch2'] = np.array(i2)
-        self.log_data['power_ch2'] = np.array(p2)
-
-
-
+        if global_input_values['ch2']:
+            self.log_data['voltage_ch2'] = np.array(v2)
+            self.log_data['current_ch2'] = np.array(i2)
+            self.log_data['power_ch2'] = np.array(p2)
 
 
 class FastLog:
