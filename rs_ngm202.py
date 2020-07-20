@@ -304,7 +304,8 @@ class Display:
 # 'enable' key does not track when log stopped after starting (fix unlikely)
 
 # read log data into np.arrays:
-# dev.log.get_log_files()           populates: log_files
+# dev.log.get_log_files()           populates: log_files (***do this first!!!)
+# dev.log.delete_log_file(5)        assert dominance! (also deletes specified log file)
 # ***Review list in log_files for the file you want to read and note the dict:key
 # dev.log.build_log_data(key)       reads the log into a set of np.arrays
 # @TODO: error checking for log data, more file commands, add some metadata from log file
@@ -434,6 +435,12 @@ class Log:
             self.log_data['voltage_ch2'] = np.array(v2)
             self.log_data['current_ch2'] = np.array(i2)
             self.log_data['power_ch2'] = np.array(p2)
+
+
+    def delete_log_file(self, log_file_key: int):
+        write = 'DATA:DEL ' + self.log_files[log_file_key]
+        self._command.write(write)
+        self.get_log_files()
 
 
 class FastLog:
