@@ -21,9 +21,10 @@ class Device:
         global_input_values['ch2'] = '202' in model
         global_input_values['expanded_features'] = 'NGM' in model
         # Device class shortcuts
-        self.com = Common(self._bus)
+        self._com = Common(self._bus)
         self.disp = Display(self._bus)
         self.log = Log(self._bus)
+        self.trig = Trigger(self._bus)
         self.ch1 = Channel(self._bus, '1')
         if global_input_values['ch2']:
             self.ch2 = Channel(self._bus, '2')
@@ -936,11 +937,77 @@ class DigitalIO:
     pass
 
 
-# @TODO not implemented
+# @TODO needs testing, trigger device, and trigger channel enable tracking needs work
+# @TODO investigate trigger settings of other classes
 class Trigger:
     def __init__(self, bus):
         self._bus = bus
-    pass
+        self._command = Command(self._bus)
+        self._validate = ValidateTrigger()
+        self._trig = {}
+        self._trig = {
+            'enable': 'UNK',
+            'source': self.source(),
+            'dio_channel': self.dio_channel(),
+            'dio_pin': self.dio_pin(),
+            'output_mode': self.output_mode(),
+            'output_mode_channel': self.output_mode_channel(),
+            'output_channel': self.output_channel()}
+        self.values = {
+            'device': global_input_values,
+            'settings': self._trig}
+
+    def enable(self):
+        write = 'TRIG 1'
+        self._trig['enable'] = '1'
+        self._command.write(write)
+
+    def disable(self):
+        write = 'TRIG 0'
+        self._trig['enable'] = '0'
+        self._command.write(write)
+
+    def source(self, set_source=None):
+        query = 'TRIG:SOUR?'
+        write = 'TRIG:SOUR'
+        return self._command.read_write(
+            query, write, self._validate.source,
+            set_source, self._trig, 'source')
+
+    def dio_channel(self, set_dio_chan=None):
+        query = 'TRIG:SOUR:DIO:CHAN?'
+        write = 'TRIG:SOUR:DIO:CHAN'
+        return self._command.read_write(
+            query, write, self._validate.channel,
+            set_dio_chan, self._trig, 'dio_channel')
+
+    def dio_pin(self, set_io_pin=None):
+        query = 'TRIG:SOUR:DIO:PIN?'
+        write = 'TRIG:SOUR:DIO:PIN'
+        return self._command.read_write(
+            query, write, self._validate.pin,
+            set_io_pin, self._trig, 'dio_pin')
+
+    def output_mode(self, set_output_mode=None):
+        query = 'TRIG:SOUR:OMOD?'
+        write = 'TRIG:SOUR:OMOD'
+        return self._command.read_write(
+            query, write, self._validate.output_mode,
+            set_output_mode, self._trig, 'count')
+
+    def output_mode_channel(self, set_output_mode_channel=None):
+        query = 'TRIG:SOUR:OMOD:CHAN?'
+        write = 'TRIG:SOUR:OMOD:CHAN'
+        return self._command.read_write(
+            query, write, self._validate.channel,
+            set_output_mode_channel, self._trig, 'count')
+
+    def output_channel(self, set_output_channel=None):
+        query = 'TRIG:SOUR:OUTP:CHAN?'
+        write = 'TRIG:SOUR:OUTP:CHAN'
+        return self._command.read_write(
+            query, write, self._validate.channel,
+            set_output_channel, self._trig, 'output_channel')
 
 
 class Status:
@@ -1448,7 +1515,7 @@ class ValidateChannel(Validate):
         return self.float_and_str_tuples(voltage_range_values, value)
 
     def mode(self, value):
-        mode_values = ('auto', 'sour', 'source', 'sink')
+        mode_values = ('AUTO', 'SOURce', 'SINK')
         return self.str_tuple(mode_values, value)
 
     def on_off(self, value):
@@ -1464,7 +1531,7 @@ class ValidateChannel(Validate):
         return self.str_tuple(channel_values, value)
 
     def ramp_duration(self, value):
-        ramp_duration_values = (0.01, 10.0), ('min', 'max', 'default')
+        ramp_duration_values = (0.01, 10.0), ('min', 'max', 'DEFault')
         return self.float_rng_and_str_tuples(ramp_duration_values, value, 2)
 
 
@@ -1571,6 +1638,31 @@ class ValidateFastLog(Validate):
     def write_duration(self, value):
         write_duration_values = (0.1, 99999.9)
         return self.float_rng_tuple(write_duration_values, value, 1)
+
+
+class ValidateTrigger(Validate):
+    Validate().__init__()
+
+    def state(self, value):
+        state_values = (0, 1)
+        return self.int_tuple(state_values, value)
+
+    def source(self, value):
+        source_values = ('OUTPut', 'OMODe', 'DIO')
+        return self.str_tuple(source_values, value)
+
+    def channel(self, value):
+        channel_values = (1, 2), ('1', 'OUT1', 'OUTP1', 'OUTPut1',
+                                  '2', 'OUT2', 'OUTP2', 'OUTPut2')
+        return self.int_and_str_tuples(channel_values, value)
+
+    def pin(self, value):
+        pin_values = ('IN', 'EXT')
+        return self.str_tuple(pin_values, value)
+
+    def output_mode(self, value):
+        output_mode_values = ('CC', 'CV', 'CR', 'SINK', 'PROTection')
+        return self.str_tuple(output_mode_values, value)
 
 
 class ValidateRegister(Validate):
