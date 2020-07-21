@@ -302,12 +302,6 @@ class Display:
 
 # @TODO: Investigate triggering and LOG:STIM command
 # 'enable' key does not track when log stopped after starting (fix unlikely)
-
-# read log data into np.arrays:
-# dev.log.get_log_files()           populates: log_files (***do this first!!!)
-# dev.log.delete_log_file(5)        assert dominance! (also deletes specified log file)
-# ***Review list in log_files for the file you want to read and note the dict:key
-# dev.log.build_log_data(key)       reads the log into a set of np.arrays
 # @TODO: error checking for log data, more file commands, add some metadata from log file
 
 class Log:
@@ -396,14 +390,13 @@ class Log:
 
     def get_log_files(self):
         self.log_files.clear()
-        keycount = 0
+        key_count = 0
         query = 'DATA:LIST?'
-        rawfilelist = self._command.read(query)
-        splitfilelist = rawfilelist.split(',')
-        for filepath in splitfilelist:
-            if '/logging/' in filepath:
-                keycount += 1
-                self.log_files[keycount] = filepath
+        all_file_paths = str(self._command.read(query)).split(',')
+        for file_path in all_file_paths:
+            if '/logging/' in file_path:
+                key_count += 1
+                self.log_files[key_count] = file_path
 
     def build_log_data(self, log_file_key: int):
         query = 'DATA:DATA? ' + self.log_files[log_file_key]
@@ -493,9 +486,9 @@ class FastLog:
         self._command.write(write)
 
     # @TODO: Command 'FLOG:WFIL' does not work as documented by R&S
-    def local_file_location(self, value: str):
-        write = 'FLOG:WFIL'
-        self._command.write_value(write, None, value)
+    #def local_file_location(self, value: str):
+    #    write = 'FLOG:WFIL'
+    #    self._command.write_value(write, None, value)
 
     def sample_rate(self, set_sample_rate=None):
         query = ':FLOG:SRAT?'
@@ -507,21 +500,21 @@ class FastLog:
     # Populated flog_file:dict with raw flog file paths on inserted USB(s)
     def get_flog_files(self):
         self.flog_files.clear()
-        keycount = 0
+        chan_raw = 'ch' + self._channel + '.raw'
+        key_count = 0
         query = 'DATA:LIST?'
-        rawfilelist = self._command.read(query)
-        splitfilelist = rawfilelist.split(',')
-        for filepath in splitfilelist:
-            if '/fastlog/' in filepath:
-                if 'raw' in filepath:
-                    keycount += 1
-                    self.flog_files[keycount] = filepath
+        all_file_paths = str(self._command.read(query)).split(',')
+        for file_path in all_file_paths:
+            if '/fastlog/' in file_path:
+                if chan_raw in file_path:
+                    key_count += 1
+                    self.flog_files[key_count] = file_path
 
     # Import raw flog data into np.arrays
     # Pass the dictionary key for the file you want to import from flog_files:dict
     # example: build_flog_data(1)
-    def build_flog_data(self, log_file_key: int):
-        raw_file = str(self.flog_files[log_file_key])
+    def build_flog_data(self, flog_file_key: int):
+        raw_file = str(self.flog_files[flog_file_key])
         meta_file = raw_file.replace('.raw', '.meta')
         write = 'DATA:DATA? ' + raw_file
         self._command.write(write)
@@ -640,25 +633,6 @@ class FastLog:
                 0, self._flog['sample_time'] * self.flog_data['voltage'].size,
                 self._flog['sample_time'], dtype='d').round(9)
 
-
-# Usage Example:
-# dev.ch1.arb.clear()
-# dev.ch1.arb.add.point(5, 1, 0.1, 1)       ideally run in a loop
-# .
-# .
-# dev.ch1.arb.add_point(...)
-# dev.ch1.arb.edit_point(1024,....)         opps point 1024 is wrong (not necessary step)
-# dev.ch1.arb.build()                       transfer all arb points to device
-# dev.ch1.arb.repetitions(2)                repeat arb 2x (***must be after build())
-# dev.ch1.arb.end_behavior('off')           turn off at end of sequence
-# dev.ch1.arb.save_to_internal              (only if you wanted to save the file)
-# dev.ch1.arb.transfer()                    transfer created arb for channel 1
-#      or
-# dev.ch1.arb.transfer(1)                   transfer created arb to channel 1
-#      or
-# dev.ch1.arb.transfer(2)                   activate created arb for channel 2
-# dev.ch1.arb.enable()                      enable arb on channel
-# dev.ch1.on()
 
 # @TODO implement trigger
 class Arbitrary:
