@@ -30,6 +30,14 @@ Status:     	dev.status
 	* Assign arb patterns to channels
 
 ## Usage Examples
+### Sending SCPI commands
+If you need to use direct SCPI commands, pyvisa functions are provided
+```
+dev.query('*IDN?')
+dev.write('FLOG:DATA?)
+dev.read.raw()
+etc.
+```
 ### Programming channel output
 ```
 dev.ch1.voltage(5) # 5V
