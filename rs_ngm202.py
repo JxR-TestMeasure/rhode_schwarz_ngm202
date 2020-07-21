@@ -412,7 +412,7 @@ class Log:
         meas_array = result_array[17:-1]
         interval = float(result_array[6].split(',')[1])
         number_samples = result_array.__len__() - 18
-        self.log_data['seconds'] = np.arange(0, interval * number_samples, interval)
+        self.log_data['seconds'] = np.arange(0, interval * number_samples, interval, dtype='f').round(1)
         v1 = []
         i1 = []
         p1 = []
@@ -428,21 +428,22 @@ class Log:
                 v2.append(np.single(samples[4]))
                 i2.append(np.single(samples[5]))
                 p2.append(np.single(samples[6]))
-        self.log_data['voltage_ch1'] = np.array(v1)
-        self.log_data['current_ch1'] = np.array(i1)
-        self.log_data['power_ch1'] = np.array(p1)
+        self.log_data['voltage_ch1'] = np.array(v1).round(6)
+        self.log_data['current_ch1'] = np.array(i1).round(8)
+        self.log_data['power_ch1'] = np.array(p1).round(6)
         if global_input_values['ch2']:
-            self.log_data['voltage_ch2'] = np.array(v2)
-            self.log_data['current_ch2'] = np.array(i2)
-            self.log_data['power_ch2'] = np.array(p2)
-
+            self.log_data['voltage_ch2'] = np.array(v2).round(6)
+            self.log_data['current_ch2'] = np.array(i2).round(8)
+            self.log_data['power_ch2'] = np.array(p2).round(6)
 
     def delete_log_file(self, log_file_key: int):
         write = 'DATA:DEL ' + self.log_files[log_file_key]
         self._command.write(write)
         self.get_log_files()
 
-
+# @TODO: Why does internal FLOG and SCPI flog produce different data sizes for same sample time??
+# 1s S500K internal fast log = 500,000 samples of V/I
+# 1s S500K scpi fast log = 524,160 samples of V/I
 class FastLog:
     def __init__(self, bus, channel):
         self._bus = bus
@@ -454,11 +455,12 @@ class FastLog:
         self._flog = {
             'enable': self._flog_enable,
             'sample_rate': self.sample_rate(),
-            'sample_time': '0'}
+            'sample_interval': '0'}
         self.values = {
             'device': global_input_values,
             'settings': self._flog}
         self.flog_data = {}
+        self.flog_files = {}
 
         self.com = Common(self._bus)
         self.status = Status(self._bus, self._channel)
@@ -480,9 +482,20 @@ class FastLog:
         query = ':FLOG?'
         return self._command.read(query)
 
+    # @TODO: Command 'FLOG:TARG' undocumented by R&S
+    def target_usb(self):
+        write = 'FLOG:TARG USB'
+        self._command.write(write)
+
+    # @TODO: Command 'FLOG:TARG' undocumented by R&S
     def target_scpi(self):
         write = ':FLOG:TARG SCPI'
         self._command.write(write)
+
+    # @TODO: Command 'FLOG:WFIL' does not work as documented by R&S
+    def local_file_location(self, value: str):
+        write = 'FLOG:WFIL'
+        self._command.write_value(write, None, value)
 
     def sample_rate(self, set_sample_rate=None):
         query = ':FLOG:SRAT?'
@@ -491,7 +504,63 @@ class FastLog:
             query, write, self._validate.sample_rates,
             set_sample_rate, self._flog, 'sample_rate')
 
-    def initialize(self):
+    # Populated flog_file:dict with raw flog file paths on inserted USB(s)
+    def get_flog_files(self):
+        self.flog_files.clear()
+        keycount = 0
+        query = 'DATA:LIST?'
+        rawfilelist = self._command.read(query)
+        splitfilelist = rawfilelist.split(',')
+        for filepath in splitfilelist:
+            if '/fastlog/' in filepath:
+                if 'raw' in filepath:
+                    keycount += 1
+                    self.flog_files[keycount] = filepath
+
+    # Import raw flog data into np.arrays
+    # Pass the dictionary key for the file you want to import from flog_files:dict
+    # example: build_flog_data(1)
+    def build_flog_data(self, log_file_key: int):
+        raw_file = str(self.flog_files[log_file_key])
+        meta_file = raw_file.replace('.raw', '.meta')
+        write = 'DATA:DATA? ' + raw_file
+        self._command.write(write)
+        raw_data = self._bus.read_raw()
+        query = 'DATA:DATA? ' + meta_file
+        meta_data = self._command.read(query)
+        sample_rate = float(meta_data.split('\n')[5].split('\t')[1])
+        interval = 1 / sample_rate
+        data = np.frombuffer(raw_data[0:-1], dtype='<f4')
+        number_samples = data.size / 2
+        self._flog['sample_rate'] = sample_rate
+        self._flog['sample_interval'] = interval
+        self.flog_data['seconds'] = np.arange(0, interval * number_samples, interval, dtype='f').round(7)
+        self.flog_data['voltage'] = np.array(data[0::2]).round(6)
+        self.flog_data['current'] = np.array(data[1::2]).round(8)
+        self.flog_data['power'] = np.array(self.flog_data['voltage'] * self.flog_data['current']).round(6)
+
+    def delete_flog_file(self, flog_file_key: int):
+        raw_file = self.flog_files[flog_file_key]
+        meta_file = raw_file.replace('.raw', '.meta')
+        write = 'DATA:DEL ' + raw_file
+        self._command.write(write)
+        write = 'DATA:DEL ' + meta_file
+        self._command.write(write)
+        self.get_flog_files()
+
+    # @TODO Does not work as intended due to undocumented bugs in SCPI command 'FLOG:WFIL'
+    # Duration must be set manually on front panel
+    def start_local(self, sample_rate='S15', sample_duration=0.1):
+        self.disable()
+        self.sample_rate(sample_rate)
+        self.target_usb()
+        # write = 'FLOG:WFIL 1'       # SCPI Error (seems redundent with 'FLOG:TARG USB'
+        # self._command.write(write)
+        # write = 'FLOG:WFIL:DUR'     # SCPI Error
+        # self._command.write_value(write, self._validate.write_duration, sample_duration)
+        self.enable()
+
+    def initialize_scpi(self):
         self.disable()
         # Clear event registers
         self.status.get_opr_inst_event_reg()
@@ -509,6 +578,7 @@ class FastLog:
         self.status.get_opr_inst_event_reg()
         self.target_scpi()
 
+    # @TODO: Sample time unconfirmed by R&S
     # Turn on fast logging for the channel
     # All fast log samples are in blocks of 0.5s
     #   num_samples = 2 --> fast log for 1.0s
@@ -529,13 +599,13 @@ class FastLog:
     #       'S125K'   :   ~128 kSPS
     #       'S250K'   :   ~256 kSPS
     #       'S500K'   :   ~525 kSPS
-    def start(self, sample_rate='S15', num_samples=1):
+    def start_scpi(self, sample_rate='S15', num_samples=1):
         counter = num_samples
         inst_channel_bit = 2 if self._channel == '1' else 4
         stb_opr_status_bit = 128
         flog_data_rdy_bit = 4096
         opr_event_bit = 8192
-        self.initialize()
+        self.initialize_scpi()
         self.sample_rate(sample_rate)
         self.enable()
         while self._flog_enable:
@@ -553,22 +623,22 @@ class FastLog:
                             np.set_printoptions(
                                     formatter={'float': '{:.6e}'.format}, suppress=False)
                             if counter == num_samples:
-                                self.flog_data['voltage'] = data[0:-2:2]
-                                self.flog_data['current'] = data[1:-1:2]
+                                self.flog_data['voltage'] = np.array(data[0::2]).round(6)
+                                self.flog_data['current'] = np.array(data[1::2]).round(8)
                             else:
                                 self.flog_data['voltage'] = np.append(
-                                        self.flog_data['voltage'], data[0:-2:2], axis=0)
+                                    self.flog_data['voltage'], data[0::2], axis=0).round(6)
                                 self.flog_data['current'] = np.append(
-                                        self.flog_data['current'], data[1:-1:2], axis=0)
+                                    self.flog_data['current'], data[1::2], axis=0).round(8)
                             counter -= 1
                             if counter == 0:
                                 self.disable()
-        self.flog_data['power'] = self.flog_data['voltage'] * self.flog_data['current']
+        self.flog_data['power'] = np.array(self.flog_data['voltage'] * self.flog_data['current']).round(6)
         self._flog['sample_time'] = np.single(
                 (float(num_samples) * 0.5) / self.flog_data['voltage'].size)
         self.flog_data['seconds'] = np.arange(
                 0, self._flog['sample_time'] * self.flog_data['voltage'].size,
-                self._flog['sample_time'])
+                self._flog['sample_time'], dtype='d').round(9)
 
 
 # Usage Example:
@@ -1266,7 +1336,7 @@ class Validate:
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}\n'
-                                  'or in set:(float, str) {}'.format(
+                                  'or in set:(float, int) {}'.format(
                     validation_set[1],
                     validation_set[0]))
         else:
@@ -1524,6 +1594,10 @@ class ValidateFastLog(Validate):
                                )
         return self.str_tuple(sample_rates_values, value)
 
+    def write_duration(self, value):
+        write_duration_values = (0.1, 99999.9)
+        return self.float_rng_tuple(write_duration_values, value, 1)
+
 
 class ValidateRegister(Validate):
     def __init__(self):
@@ -1563,7 +1637,11 @@ class Command(Validate):
             if validator is not None:
                 val = validator(value)
                 if isinstance(val, (ValueError, TypeError)):
-                    print(self.error_text('WARNING', val))
+                    if value_key is not None:
+                        error_msg = value_key + ':' + str(val)
+                    else:
+                        error_msg = val
+                    print(self.error_text('WARNING', error_msg))
                 else:
                     write = write + ' ' + str(value)
                     self._bus.write(write)
