@@ -82,6 +82,8 @@ class Channel:
         self._chan['fast_transient'] = self.fast_transient_response()
         self._chan['output_delay'] = self.output_delay()
         self._chan['output_delay_duration'] = self.output_delay_duration()
+        self._chan['trigger_enable'] = self.trigger()
+        self._chan['trigger_behavior'] = self.trigger_behavior()
         self.values = {
             'device': global_input_values,
             'settings': self._chan}
@@ -273,6 +275,20 @@ class Channel:
             query, write, self._validate.output_delay_duration,
             set_output_delay_duration, self._chan, 'output_delay_duration')
 
+    def trigger(self, set_trigger_on_off=None):
+        query = 'OUTP:TRIG?'
+        write = 'OUTP:TRIG'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_trigger_on_off, self._chan, 'trigger_enable')
+
+    def trigger_behavior(self, set_output_behavior=None):
+        query = 'OUTP:TRIG:BEH?'
+        write = 'OUTP:TRIG:BEH'
+        return self._command.read_write(
+            query, write, self._validate.trigger_behavior,
+            set_output_behavior, self._chan, 'trigger_output_behavior')
+
 
 class Display:
     def __init__(self, bus):
@@ -301,7 +317,6 @@ class Display:
         self._command.write(write)
 
 
-# @TODO: Investigate triggering and LOG:STIM command
 # 'enable' key does not track when log stopped after starting (fix unlikely)
 # @TODO: error checking for log data, more file commands, add some metadata from log file
 
@@ -320,7 +335,8 @@ class Log:
             'duration': self.duration(),
             'interval': self.interval(),
             'file_name': self.get_file_name(),
-            'start_time': self.get_start_time()}
+            'start_time': self.get_start_time(),
+            'trigger_enable': self.trigger()}
         self.values = {
             'device': global_input_values,
             'settings': self._log}
@@ -435,6 +451,13 @@ class Log:
         self._command.write(write)
         self.get_log_files()
 
+    def trigger(self, set_trigger_on_off=None):
+        query = 'OUTP:TRIG?'
+        write = 'OUTP:TRIG'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_trigger_on_off, self._log, 'trigger_enable')
+
 # @TODO: Why does internal FLOG and SCPI flog produce different data sizes for same sample time??
 # 1s S500K internal fast log = 500,000 samples of V/I
 # 1s S500K scpi fast log = 524,160 samples of V/I
@@ -449,7 +472,8 @@ class FastLog:
         self._flog = {
             'enable': self._flog_enable,
             'sample_rate': self.sample_rate(),
-            'sample_interval': '0'}
+            'sample_interval': '0',
+            'trigger_enable': self.trigger()}
         self.values = {
             'device': global_input_values,
             'settings': self._flog}
@@ -634,8 +658,14 @@ class FastLog:
                 0, self._flog['sample_time'] * self.flog_data['voltage'].size,
                 self._flog['sample_time'], dtype='d').round(9)
 
+    def trigger(self, set_trigger_on_off=None):
+        query = 'OUTP:TRIG?'
+        write = 'OUTP:TRIG'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_trigger_on_off, self._flog, 'trigger_enable')
 
-# @TODO implement trigger
+
 class Arbitrary:
     def __init__(self, bus, channel: str):
         self._bus = bus
@@ -646,7 +676,9 @@ class Arbitrary:
         self.arb_list = {}
         self._arb = {}
         self._arb = {'enable': self.get_enable(),
-                     'points': self._arb_count}
+                     'points': self._arb_count,
+                     'trigger_enable': self.trigger(),
+                     'trigger_mode': self.trigger_mode()}
         self.values = {
             'device': global_input_values,
             'settings': self._arb}
@@ -722,14 +754,14 @@ class Arbitrary:
         write = 'ARB:REP'
         return self._command.read_write(
             query, write, self._validate.repetition,
-            set_num_repeats)
+            set_num_repeats, self._arb, 'repetitions')
 
     def end_behavior(self, set_end_behavior=None):
         query = 'ARB:BEH:END?'
         write = 'ARB:BEH:END'
         return self._command.read_write(
             query, write, self._validate.end_behavior,
-            set_end_behavior)
+            set_end_behavior, self._arb, 'end_behavior')
 
     def save_to_internal(self, file_name_csv: str):
         write = 'ARB:FNAME "' + file_name_csv + '", INT'
@@ -785,6 +817,20 @@ class Arbitrary:
         self._command.write(write)
         write = 'ARB:LOAD'
         self._command.write(write)
+
+    def trigger(self, set_trigger_on_off=None):
+        query = 'OUTP:TRIG?'
+        write = 'OUTP:TRIG'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_trigger_on_off, self._arb, 'trigger_enable')
+
+    def trigger_mode(self, set_trigger_mode=None):
+        query = 'ARB:TRIG:MODE?'
+        write = 'ARB:TRIG:MODE'
+        return self._command.read_write(
+            query, write, self._validate.trigger_mode,
+            set_trigger_mode, self._arb, 'trigger_mode')
 
 
 class Measure:
@@ -937,8 +983,6 @@ class DigitalIO:
     pass
 
 
-# @TODO needs testing, trigger device, and trigger channel enable tracking needs work
-# @TODO investigate trigger settings of other classes
 class Trigger:
     def __init__(self, bus):
         self._bus = bus
@@ -946,7 +990,7 @@ class Trigger:
         self._validate = ValidateTrigger()
         self._trig = {}
         self._trig = {
-            'enable': 'UNK',
+            'enable': self.get_enable(),
             'source': self.source(),
             'dio_channel': self.dio_channel(),
             'dio_pin': self.dio_pin(),
@@ -959,13 +1003,17 @@ class Trigger:
 
     def enable(self):
         write = 'TRIG 1'
-        self._trig['enable'] = '1'
         self._command.write(write)
+        self._trig['enable'] = self.get_enable()
 
     def disable(self):
         write = 'TRIG 0'
-        self._trig['enable'] = '0'
         self._command.write(write)
+        self._trig['enable'] = self.get_enable()
+
+    def get_enable(self):
+        query = 'TRIG?'
+        return self._command.read(query)
 
     def source(self, set_source=None):
         query = 'TRIG:SOUR?'
@@ -1530,12 +1578,16 @@ class ValidateChannel(Validate):
         return self.float_rng_and_str_tuples(output_delay_duration_values, value, 3)
 
     def channel(self, value):
-        channel_values = (1, 2)
-        return self.int_rng_tuple(channel_values, value)
+        channel_values = (1, 2), ('1', '2')
+        return self.int_rng_and_str_tuples(channel_values, value)
 
     def ramp_duration(self, value):
         ramp_duration_values = (0.01, 10.0), ('min', 'max', 'DEFault', 'DEF')
         return self.float_rng_and_str_tuples(ramp_duration_values, value, 2)
+
+    def trigger_behavior(self, value):
+        trigger_behavior_values = ('ON', 'OFF', 'GATed', 'GAT')
+        return self.str_tuple(trigger_behavior_values, value)
 
 
 class ValidateArbitrary(ValidateChannel):
@@ -1566,10 +1618,6 @@ class ValidateArbitrary(ValidateChannel):
         repetition_values = ('off', 'hold')
         return self.str_tuple(repetition_values, value)
 
-    def channel(self, value):
-        channel_values = (1, 2), ('1', '2')
-        return self.int_rng_and_str_tuples(channel_values, value)
-
     def arb_list(self, arb_list: dict):
         errors = 0
         for x in arb_list.keys():
@@ -1588,6 +1636,10 @@ class ValidateArbitrary(ValidateChannel):
         else:
             print('Error count: ' + str(errors))
             return False
+
+    def trigger_mode(self, value):
+        trigger_mode_values = ('SINGle', 'SING', 'RUN')
+        return self.str_tuple(trigger_mode_values, value)
 
 
 class ValidateLog(Validate):
@@ -1624,9 +1676,9 @@ class ValidateDisplay(Validate):
         return self.float_rng_and_str_tuples(channel_values, value, 1)
 
 
-class ValidateFastLog(Validate):
+class ValidateFastLog(ValidateChannel):
     def __init__(self):
-        Validate().__init__()
+        ValidateChannel.__init__(self)
 
     def sample_rates(self, value):
         sample_rates_values = ('S15', 'S30', 'S61',
