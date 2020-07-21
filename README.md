@@ -1,10 +1,10 @@
 # Python Instrument driver for Rhode & Schwarz: NGM202, NGM201, NGL202, NGL201
 Requires: pyvisa, numpy  
-This is an unfinished work in progress.  All is subject to change.  Use at your own risk.
+This is an unfinished work in progress.  All is subject to change.  Use at your own risk.  
 ## Basic usage and class flow:
 ```
-import rs_ngm202 as dev          
-dev = Device('VISA::ADDRESS')  
+import rs_ngm202 as ngm202          
+dev = ngm202.Device('VISA::ADDRESS')  
 
 (class flow)
 Device:         dev  
@@ -38,6 +38,13 @@ dev.ch1.current(2) # 2A
 ```
 dev.ch1.voltage() --> '5.0000000E+00'
 dev.ch1.current() --> '2.0000000E+00'
+```
+### Access all settings in one location
+```
+dev.ch1.values: dict			# contains device:dict and settings:dict
+dev.ch1.values['device']		# model specific data
+dev.ch1.values['settings']		# contains the current value of every configurable setting
+dev.ch1.values['settings']['current']	# the set current limit on channel 1
 ```
 ### Turn output on
 ```
@@ -76,13 +83,13 @@ dev.log.enable()			# Turn logging on
 ```
 access data from log
 ```
-dev.log.get_log_files()			# gets a list of all '.csv' logging files for the channel
+dev.log.get_log_files()			# gets a list of all '.csv' logging files
 dev.log.log_files: dict	<--		# puts them in a dict with key values:(1, 2, 3, .., n)
 dev.log.build_log_data(1)		# sorts selected file into np.arrays
 
-dev.ch1.flog.flog_data: dict	<--	# all samples in format np.array(float32)
+dev.log.log_data: dict	<--		# all samples in format np.array(float32)
 dev.log.log_data['seconds']		# calculated time based on sample interval
-dev.log.og_data['voltage_ch1']		# All voltage samples
+dev.log.log_data['voltage_ch1']		# All voltage samples
 dev.log.log_data['current_ch1']		# All current samples
 dev.log.log_data['power_ch1']		# All calculated power samples
 Note: NGx202 devices will also have arrays for ch2
