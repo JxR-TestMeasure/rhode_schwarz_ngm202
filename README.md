@@ -14,6 +14,7 @@ Channel:        dev.ch<1,2>
  Arbitary	dev.ch<1,2>.arb
  FastLog	dev.ch<1,2>.flog
  Measure:    	dev.ch<1,2>.meas
+ Protection:	dev.ch<1,2>.prot
 Trigger:	dev.trig
 Common:     	dev.com 
 Status:     	dev.status
