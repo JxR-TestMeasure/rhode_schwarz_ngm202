@@ -25,9 +25,9 @@ class Device:
         self.disp = Display(self._bus)
         self.log = Log(self._bus)
         self.trig = Trigger(self._bus)
-        self.ch1 = Channel(self._bus, '1')
+        self.ch1 = Channel(self._bus, 1)
         if global_input_values['ch2']:
-            self.ch2 = Channel(self._bus, '2')
+            self.ch2 = Channel(self._bus, 2)
 
     def write(self, command):
         self._bus.write(command)
@@ -1284,8 +1284,11 @@ class Validate:
     def int_range(self):
         return lambda x, y: x in range(y[0], y[1] + 1)
 
-    def find_element(self):
-        return lambda x, y: x in y
+    def find_element(self, x, y):
+        for value in y:
+            if str(x).lower() == str(value).lower():
+                return True
+        return False
 
     def error_text(self, warning_type, error_type):
         ansi_esc_seq = {'HEADER': '\033[95m',
@@ -1309,19 +1312,19 @@ class Validate:
                 return ValueError('ValueError!\n'
                                   'Not in range:(float, int) {}\n'
                                   'or in set:(str) {}'.format(
-                    validation_set[0],
-                    validation_set[1]))
+                                   validation_set[0],
+                                   validation_set[1]))
         elif isinstance(value, str):
-            val = value.lower()
-            validator = self.find_element()
-            if validator(val, str(validation_set[1]).lower()):
+            val = value
+            validator = self.find_element
+            if validator(val, validation_set[1]):
                 return val.upper()
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}\n'
                                   'or in range:(float, int) {}'.format(
-                    validation_set[1],
-                    validation_set[0]))
+                                   validation_set[1],
+                                   validation_set[0]))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
@@ -1338,19 +1341,19 @@ class Validate:
                 return ValueError('ValueError!\n'
                                   'Not in range:(int) {}\n'
                                   'or in set:(str) {}'.format(
-                    validation_set[0],
-                    validation_set[1]))
+                                   validation_set[0],
+                                   validation_set[1]))
         elif isinstance(value, str):
-            val = value.lower()
-            validator = self.find_element()
-            if validator(val, str(validation_set[1]).lower()):
+            val = value
+            validator = self.find_element
+            if validator(val, validation_set[1]):
                 return val.upper()
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}\n'
                                   'or in range:(int) {}'.format(
-                    validation_set[1],
-                    validation_set[0]))
+                                   validation_set[1],
+                                   validation_set[0]))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
@@ -1359,7 +1362,7 @@ class Validate:
 
     def float_and_str_tuples(self, validation_set, value):
         if isinstance(value, (float, int)):
-            validator = self.find_element()
+            validator = self.find_element
             val = float(value)
             if validator(val, validation_set[0]):
                 return str(value)
@@ -1367,28 +1370,28 @@ class Validate:
                 return ValueError('ValueError!\n'
                                   'Not in set:(float, int) {}\n'
                                   'or in set:(str) {}'.format(
-                    validation_set[0],
-                    validation_set[1]))
+                                   validation_set[0],
+                                   validation_set[1]))
         elif isinstance(value, str):
-            val = value.lower()
-            validator = self.find_element()
-            if validator(val, str(validation_set[1]).lower()):
+            val = value
+            validator = self.find_element
+            if validator(val, validation_set[1]):
                 return val.upper()
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}\n'
                                   'or in set:(float, int) {}'.format(
-                    validation_set[1],
-                    validation_set[0]))
+                                   validation_set[1],
+                                   validation_set[0]))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}, {}, {}'.format(
-                type(value), int, float, str))
+                              type(value), int, float, str))
 
     def int_and_str_tuples(self, validation_set, value):
         if isinstance(value, int):
-            validator = self.find_element()
+            validator = self.find_element
             val = float(value)
             if validator(val, validation_set[0]):
                 return str(value)
@@ -1399,21 +1402,21 @@ class Validate:
                     validation_set[0],
                     validation_set[1]))
         elif isinstance(value, str):
-            val = value.lower()
-            validator = self.find_element()
-            if validator(val, str(validation_set[1]).lower()):
+            val = value
+            validator = self.find_element
+            if validator(val, validation_set[1]):
                 return val.upper()
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}\n'
                                   'or in set:(int) {}'.format(
-                    validation_set[1],
-                    validation_set[0]))
+                                   validation_set[1],
+                                   validation_set[0]))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}, {}'.format(
-                type(value), int, str))
+                              type(value), int, str))
 
     def float_rng_tuple(self, validation_set, value, round_to):
         if isinstance(value, (float, int)):
@@ -1429,39 +1432,39 @@ class Validate:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}, {}'.format(
-                type(value), int, float))
+                              type(value), int, float))
 
     def str_tuple(self, validation_set, value):
         if isinstance(value, str):
-            val = value.lower()
-            validator = self.find_element()
-            if validator(val, str(validation_set).lower()):
+            val = value
+            validator = self.find_element
+            if validator(val, validation_set):
                 return val.upper()
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(str) {}'.format(
-                    validation_set))
+                                   validation_set))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}'.format(
-                type(value), str))
+                              type(value), str))
 
     def int_tuple(self, validation_set, value):
         if isinstance(value, int):
             val = value
-            validator = self.find_element()
+            validator = self.find_element
             if validator(val, validation_set):
                 return str(val)
             else:
                 return ValueError('ValueError!\n'
                                   'Not in set:(int) {}'.format(
-                    validation_set))
+                                   validation_set))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}'.format(
-                type(value), int))
+                              type(value), int))
 
     def int_rng_tuple(self, validation_set, value):
         if isinstance(value, int):
@@ -1472,12 +1475,12 @@ class Validate:
             else:
                 return ValueError('ValueError!\n'
                                   'Not in range:(int) {}'.format(
-                    validation_set))
+                                   validation_set))
         else:
             return TypeError('TypeError!\n'
                              'Received type: {}\n'
                              'Valid types: {}'.format(
-                type(value), int))
+                              type(value), int))
 
     def halt_on_fail(self, value):
         if isinstance(value, (ValueError, TypeError)):
@@ -1515,7 +1518,7 @@ class ValidateChannel(Validate):
         return self.float_and_str_tuples(voltage_range_values, value)
 
     def mode(self, value):
-        mode_values = ('AUTO', 'SOURce', 'SINK')
+        mode_values = ('AUTO', 'SOURce', 'SINK', 'SOUR')
         return self.str_tuple(mode_values, value)
 
     def on_off(self, value):
@@ -1527,11 +1530,11 @@ class ValidateChannel(Validate):
         return self.float_rng_and_str_tuples(output_delay_duration_values, value, 3)
 
     def channel(self, value):
-        channel_values = ('1', '2')
-        return self.str_tuple(channel_values, value)
+        channel_values = (1, 2)
+        return self.int_rng_tuple(channel_values, value)
 
     def ramp_duration(self, value):
-        ramp_duration_values = (0.01, 10.0), ('min', 'max', 'DEFault')
+        ramp_duration_values = (0.01, 10.0), ('min', 'max', 'DEFault', 'DEF')
         return self.float_rng_and_str_tuples(ramp_duration_values, value, 2)
 
 
@@ -1553,7 +1556,7 @@ class ValidateArbitrary(ValidateChannel):
 
     def interpolation(self, value):
         interpolation_values = (0, 1)
-        return self.int_tuple(interpolation_values, value)
+        return self.int_rng_tuple(interpolation_values, value)
 
     def repetition(self, value):
         repetition_values = (0, 65535)
@@ -1565,7 +1568,7 @@ class ValidateArbitrary(ValidateChannel):
 
     def channel(self, value):
         channel_values = (1, 2), ('1', '2')
-        return self.int_and_str_tuples(channel_values, value)
+        return self.int_rng_and_str_tuples(channel_values, value)
 
     def arb_list(self, arb_list: dict):
         errors = 0
@@ -1604,7 +1607,7 @@ class ValidateLog(Validate):
         return self.float_rng_and_str_tuples(interval_values, value, 1)
 
     def mode(self, value):
-        mode_values = ('UNLimited', 'COUNt', 'DURation', 'SPAN')
+        mode_values = ('UNLimited', 'COUNt', 'DURation', 'SPAN', 'COUN', 'UNL', 'DUR')
         return self.str_tuple(mode_values, value)
 
     def on_off(self, value):
@@ -1646,23 +1649,23 @@ class ValidateTrigger(Validate):
 
     def state(self, value):
         state_values = (0, 1)
-        return self.int_tuple(state_values, value)
+        return self.int_rng_tuple(state_values, value)
 
     def source(self, value):
-        source_values = ('OUTPut', 'OMODe', 'DIO')
+        source_values = ('OUTPut', 'OMODe', 'DIO', 'OUTP', 'OMOD')
         return self.str_tuple(source_values, value)
 
     def channel(self, value):
         channel_values = (1, 2), ('1', 'OUT1', 'OUTP1', 'OUTPut1',
                                   '2', 'OUT2', 'OUTP2', 'OUTPut2')
-        return self.int_and_str_tuples(channel_values, value)
+        return self.int_rng_and_str_tuples(channel_values, value)
 
     def pin(self, value):
         pin_values = ('IN', 'EXT')
         return self.str_tuple(pin_values, value)
 
     def output_mode(self, value):
-        output_mode_values = ('CC', 'CV', 'CR', 'SINK', 'PROTection')
+        output_mode_values = ('CC', 'CV', 'CR', 'SINK', 'PROTection', 'PROT')
         return self.str_tuple(output_mode_values, value)
 
 
