@@ -39,6 +39,12 @@ dev.ch1.current(2) # 2A
 dev.ch1.voltage() --> '5.0000000E+00'
 dev.ch1.current() --> '2.0000000E+00'
 ```
+### Access all settings in one location
+```
+dev.ch1.values: dict		# contains device:dict and settings:dict
+dev.ch1.values['device']	# model specific data
+dev.ch1.values['settings']	# contains the current value of every configurable setting
+```
 ### Turn output on
 ```
 dev.ch1.on() 	# turn on ch1
