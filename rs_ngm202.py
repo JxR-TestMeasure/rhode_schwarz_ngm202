@@ -985,7 +985,12 @@ class Protection:
             'ocp_delay': self.ocp_delay(),
             'ocp_link': self.get_ocp_link(),
             'ovp_level': self.ovp_level(),
-            'opp_level': self.opp_level()}
+            'opp_level': self.opp_level(),
+            'limits_enable': self.limits(),
+            'limits_voltage_low': self.limits_voltage_low(),
+            'limits_voltage_high': self.limits_voltage_high(),
+            'limits_current_low': self.limits_current_low(),
+            'limits_current_high': self.limits_current_high()}
         self.values = {
             'device': global_input_values,
             'settings': self._prot}
@@ -1078,6 +1083,43 @@ class Protection:
     def get_opp_trip(self):
         query = 'POW:PROT:TRIP?'
         self._command.read(query)
+
+    def limits(self, safety_limits_on_off=None):
+        query = 'ALIM?'
+        write = 'ALIM'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            safety_limits_on_off, self._prot, 'limits_enable')
+
+    def limits_voltage_low(self, set_lower_voltage_lim=None):
+        query = 'VOLT:ALIM:LOW?'
+        write = 'VOLT:ALIM:LOW'
+        return self._command.read_write(
+            query, write, self._validate.voltage,
+            set_lower_voltage_lim, self._prot, 'limits_voltage_low')
+
+    def limits_voltage_high(self, set_upper_voltage_lim=None):
+        query = 'VOLT:ALIM?'
+        write = 'VOLT:ALIM'
+        return self._command.read_write(
+            query, write, self._validate.voltage,
+            set_upper_voltage_lim, self._prot, 'limits_voltage_high')
+
+    def limits_current_low(self, set_lower_current_lim=None):
+        query = 'CURR:ALIM:LOW?'
+        write = 'CURR:ALIM:LOW'
+        return self._command.read_write(
+            query, write, self._validate.voltage,
+            set_lower_current_lim, self._prot, 'limits_current_low')
+
+    def limits_current_high(self, set_upper_current_lim=None):
+        query = 'CURR:ALIM?'
+        write = 'CURR:ALIM'
+        return self._command.read_write(
+            query, write, self._validate.voltage,
+            set_upper_current_lim, self._prot, 'limits_current_high')
+
+
 
 
 
