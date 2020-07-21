@@ -76,13 +76,13 @@ dev.log.enable()			# Turn logging on
 ```
 access data from log
 ```
-dev.log.get_log_files()			# gets a list of all '.csv' logging files for the channel
+dev.log.get_log_files()			# gets a list of all '.csv' logging files
 dev.log.log_files: dict	<--		# puts them in a dict with key values:(1, 2, 3, .., n)
 dev.log.build_log_data(1)		# sorts selected file into np.arrays
 
-dev.ch1.flog.flog_data: dict	<--	# all samples in format np.array(float32)
+dev.log.log_data: dict	<--		# all samples in format np.array(float32)
 dev.log.log_data['seconds']		# calculated time based on sample interval
-dev.log.og_data['voltage_ch1']		# All voltage samples
+dev.log.log_data['voltage_ch1']		# All voltage samples
 dev.log.log_data['current_ch1']		# All current samples
 dev.log.log_data['power_ch1']		# All calculated power samples
 Note: NGx202 devices will also have arrays for ch2
