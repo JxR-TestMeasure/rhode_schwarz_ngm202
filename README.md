@@ -3,8 +3,8 @@ Requires: pyvisa, numpy
 This is an unfinished work in progress.  All is subject to change.  Use at your own risk.
 ## Basic usage and class flow:
 ```
-import rs_ngm202 as dev          
-dev = Device('VISA::ADDRESS')  
+import rs_ngm202 as ngm202          
+dev = ngm202.Device('VISA::ADDRESS')  
 
 (class flow)
 Device:         dev  
