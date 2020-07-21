@@ -993,14 +993,14 @@ class Trigger:
         write = 'TRIG:SOUR:OMOD'
         return self._command.read_write(
             query, write, self._validate.output_mode,
-            set_output_mode, self._trig, 'count')
+            set_output_mode, self._trig, 'output_mode')
 
     def output_mode_channel(self, set_output_mode_channel=None):
         query = 'TRIG:SOUR:OMOD:CHAN?'
         write = 'TRIG:SOUR:OMOD:CHAN'
         return self._command.read_write(
             query, write, self._validate.channel,
-            set_output_mode_channel, self._trig, 'count')
+            set_output_mode_channel, self._trig, 'output_mode_channel')
 
     def output_channel(self, set_output_channel=None):
         query = 'TRIG:SOUR:OUTP:CHAN?'
@@ -1641,7 +1641,8 @@ class ValidateFastLog(Validate):
 
 
 class ValidateTrigger(Validate):
-    Validate().__init__()
+    def __init__(self):
+        Validate().__init__()
 
     def state(self, value):
         state_values = (0, 1)
