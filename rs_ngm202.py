@@ -93,6 +93,7 @@ class Channel:
         if global_input_values['expanded_features']:
             self.flog = FastLog(self._bus, self._channel)
         self.meas = Measure(self._bus, self._channel)
+        self.prot = Protection(self._bus, self._channel)
 
     # ##########################
     # Channel output functions #
@@ -145,7 +146,7 @@ class Channel:
 
     # Set voltage range for channel
     # auto, 5V, 20V ranges
-    # Valid Input: 'auto', 5, 20, 0.1, 0.01
+    # Valid Input: 'auto', 5, 20
     def voltage_range(self, set_voltage_range=None):
         if global_input_values['expanded_features']:
             query = 'SENS:VOLT:RANG?'
@@ -457,6 +458,7 @@ class Log:
         return self._command.read_write(
             query, write, self._validate.on_off,
             set_trigger_on_off, self._log, 'trigger_enable')
+
 
 # @TODO: Why does internal FLOG and SCPI flog produce different data sizes for same sample time??
 # 1s S500K internal fast log = 500,000 samples of V/I
@@ -967,12 +969,116 @@ class Battery:
     pass
 
 
-# @TODO not implemented
+# @TODO safety limits
 class Protection:
     def __init__(self, bus, channel):
         self._bus = bus
         self._channel = channel
-    pass
+        self._command = Command(self._bus, self._channel)
+        self._validate = ValidateProtection()
+        self._prot = {}
+        self._prot = {
+            'ocp_enable': self.ocp(),
+            'ovp_enable': self.ovp(),
+            'opp_enable': self.opp(),
+            'ocp_delay_initial': self.ocp_delay_initial(),
+            'ocp_delay': self.ocp_delay(),
+            'ocp_link': self.get_ocp_link(),
+            'ovp_level': self.ovp_level(),
+            'opp_level': self.opp_level()}
+        self.values = {
+            'device': global_input_values,
+            'settings': self._prot}
+
+    def ocp(self, set_ocp_state=None):
+        query = 'CURR:PROT?'
+        write = 'CURR:PROT'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_ocp_state, self._prot, 'ocp_enable')
+
+    def ocp_clear(self):
+        write = 'CURR:PROT:CLE'
+        self._command.write(write)
+
+    def ocp_delay_initial(self, set_initial_delay=None):
+        query = 'CURR:PROT:DEL?'
+        write = 'CURR:PROT:DEL'
+        return self._command.read_write(
+            query, write, self._validate.delay_initial,
+            set_initial_delay, self._prot, 'ocp_delay_initial')
+
+    def ocp_delay(self, set_delay=None):
+        query = 'CURR:PROT:DEL:INIT?'
+        write = 'CURR:PROT:DEL:INIT'
+        return self._command.read_write(
+            query, write, self._validate.delay,
+            set_delay, self._prot, 'ocp_delay')
+
+    def ocp_link(self):
+        other_channel = '2' if self._channel == '1' else '1'
+        write = 'CURR:PROT:LINK ' + other_channel
+        self._command.write(write)
+        self._prot['ocp_link'] = self.get_ocp_link()
+
+    def ocp_unlink(self):
+        other_channel = '2' if self._channel == '1' else '1'
+        write = 'CURR:PROT:UNL ' + other_channel
+        self._command.write(write)
+        self._prot['ocp_link'] = self.get_ocp_link()
+
+    def get_ocp_link(self):
+        query = 'CURR:PROT:LINK?'
+        return self._command.read(query)
+
+    def get_ocp_trip(self):
+        query = 'CURR:PROT:TRIP?'
+        self._command.read(query)
+
+    def ovp(self, set_ovp_state=None):
+        query = 'VOLT:PROT?'
+        write = 'VOLT:PROT'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_ovp_state, self._prot, 'ovp_enable')
+
+    def ovp_clear(self):
+        write = 'VOLT:PROT:CLE'
+        self._command.write(write)
+
+    def ovp_level(self, set_ovp_level=None):
+        query = 'VOLT:PROT:LEV?'
+        write = 'VOLT:PROT:LEV'
+        return self._command.read_write(
+            query, write, self._validate.voltage,
+            set_ovp_level, self._prot, 'ovp_level')
+
+    def get_ovp_trip(self):
+        query = 'VOLT:PROT:TRIP?'
+        self._command.read(query)
+
+    def opp(self, set_opp_state=None):
+        query = 'POW:PROT?'
+        write = 'POW:PROT'
+        return self._command.read_write(
+            query, write, self._validate.on_off,
+            set_opp_state, self._prot, 'opp_enable')
+
+    def opp_clear(self):
+        write = 'POW:PROT:CLE'
+        self._command.write(write)
+
+    def opp_level(self, set_opp_level=None):
+        query = 'POW:PROT:LEV?'
+        write = 'POW:PROT:LEV'
+        return self._command.read_write(
+            query, write, self._validate.power,
+            set_opp_level, self._prot, 'opp_level')
+
+    def get_opp_trip(self):
+        query = 'POW:PROT:TRIP?'
+        self._command.read(query)
+
 
 
 # @TODO not implemented
@@ -1542,7 +1648,7 @@ class ValidateChannel(Validate):
         Validate().__init__()
 
     def voltage(self, value):
-        voltage_values = (0.0, 20.0), ('min', 'max')
+        voltage_values = (0.0, 20.05), ('min', 'max')
         return self.float_rng_and_str_tuples(voltage_values, value, 3)
 
     def current(self, value):
@@ -1719,6 +1825,27 @@ class ValidateTrigger(Validate):
     def output_mode(self, value):
         output_mode_values = ('CC', 'CV', 'CR', 'SINK', 'PROTection', 'PROT')
         return self.str_tuple(output_mode_values, value)
+
+
+class ValidateProtection(ValidateChannel):
+    def __init__(self):
+        ValidateChannel.__init__(self)
+
+    def delay_initial(self, value):
+        delay_initial_values = (0.0, 60.0), ('min', 'max')
+        return self.float_rng_and_str_tuples(delay_initial_values, value, 2)
+
+    def delay(self, value):
+        delay_values = (0.0, 10.0), ('min', 'max')
+        return self.float_rng_and_str_tuples(delay_values, value, 2)
+
+    def link(self, value):
+        link_values = (1, 2)
+        return self.int_rng_tuple(link_values, value)
+
+    def power(self, value):
+        delay_values = (0.0, 60.0), ('min', 'max')
+        return self.float_rng_and_str_tuples(delay_values, value, 3)
 
 
 class ValidateRegister(Validate):
