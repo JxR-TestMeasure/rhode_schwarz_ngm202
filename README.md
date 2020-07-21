@@ -35,7 +35,7 @@ If you need to use direct SCPI commands, pyvisa functions are provided
 ```
 dev.query('*IDN?')
 dev.write('FLOG:DATA?)
-dev.read.raw()
+dev.read_raw()
 etc.
 ```
 ### Programming channel output
