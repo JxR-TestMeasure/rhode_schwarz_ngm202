@@ -1035,7 +1035,8 @@ class Protection:
         self._prot['ocp_link'] = self.get_ocp_link()
 
     def get_ocp_link(self):
-        query = 'CURR:PROT:LINK?'
+        other_channel = '2' if self._channel == '1' else '1'
+        query = 'CURR:PROT:LINK? ' + other_channel
         return self._command.read(query)
 
     def get_ocp_trip(self):
